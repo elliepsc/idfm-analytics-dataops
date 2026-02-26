@@ -51,3 +51,28 @@ vars:
   # Dates de référence pour développement
   dev_start_date: '2024-01-01'
   dev_end_date: '2024-12-31'
+
+# temporary override to disable all models during development v1
+models:
+  transport_scorecard:
+    staging:
+      stg_validations_rail_daily:
+        +enabled: false
+      stg_punctuality_monthly:
+        +enabled: false
+      stg_ref_stop_lines:
+        +enabled: false
+    core:
+      fct_validations_daily:
+        +enabled: false
+      fct_punctuality_monthly:
+        +enabled: false
+      dim_ticket_type:
+        +enabled: false
+      dim_date:
+        +enabled: false
+    marts:
+      mart_network_scorecard_monthly:
+        +enabled: false
+      monitoring:
+        +enabled: false
