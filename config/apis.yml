@@ -1,0 +1,49 @@
+idfm:
+  base_url: "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
+
+  datasets:
+    validations_rail:
+      # ⚠️ ATTENTION : Dataset ID change par trimestre !
+      # Utiliser le dataset historique OU mettre à jour chaque trimestre
+      id: "histo-validations-reseau-ferre"  # Historique 2015-2024
+      # Alternative pour données récentes :
+      # id: "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre-2025"
+
+    ref_stops:
+      id: "referentiel-arret-tc-idf"
+      fields:
+        stop_id: "id"
+        stop_name: "name"
+        latitude: "stop_lat"
+        longitude: "stop_lon"
+        town: "town_name"
+
+    ref_lines:
+      id: "referentiel-des-lignes"
+      fields:
+        line_id: "id_line"
+        line_name: "name_line"
+        transport_mode: "transportmode"
+        operator: "operatorname"
+
+    ref_stop_lines:
+      id: "arrets-lignes"
+      fields:
+        stop_id: "stop_id"
+        line_id: "line_id"
+
+transilien:
+  base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
+
+  datasets:
+    punctuality:
+      id: "ponctualite-mensuelle-transilien"
+      fields:
+        month: "date"
+        line_id: "ligne"
+        line_name: "libelle_ligne"
+        punctuality_rate: "taux_regularite"
+        trains_planned: "nombre_de_trains_prevu"
+        trains_departed: "nombre_de_trains_partis"
+      filters:
+        date_field: "date"
