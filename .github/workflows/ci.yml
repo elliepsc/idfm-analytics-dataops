@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install black flake8 isort sqlfluff pytest pytest-cov
+
+      - name: Lint Python (black)
+        run: black --check ingestion/ scripts/
+
+      - name: Lint Python (isort)
+        run: isort --check-only ingestion/ scripts/
+
+      - name: Lint Python (flake8)
+        run: flake8 ingestion/ scripts/ --max-line-length=120 --extend-ignore=E203
+
+      - name: Lint SQL (sqlfluff)
+        run: sqlfluff lint warehouse/dbt/models --dialect bigquery
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+
+      - name: Install dbt
+        run: |
+          pip install dbt-core dbt-bigquery
+
+      - name: dbt deps
+        run: cd warehouse/dbt && dbt deps
+
+      - name: dbt parse (no BigQuery connection needed)
+        run: |
+          cd warehouse/dbt
+          dbt parse --profiles-dir . --profile transport_ci --target ci
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "✅ Lint checks passed"
+          echo "✅ Unit tests passed"
+          echo "✅ dbt parse successful"

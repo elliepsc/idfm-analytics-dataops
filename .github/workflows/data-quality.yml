@@ -1,0 +1,72 @@
+# Data Quality - dbt tests + SLA checks
+name: Data Quality
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'  # Weekdays at 6am UTC
+  workflow_dispatch:
+
+jobs:
+  data-quality-checks:
+    runs-on: ubuntu-latest
+
+    # Skip if no GCP credentials
+    if: ${{ secrets.GCP_SA_KEY != '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install dbt-core dbt-bigquery
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set environment variables
+        run: |
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+          echo "BQ_DATASET_ANALYTICS=transport_analytics" >> $GITHUB_ENV
+
+      - name: dbt deps
+        run: cd warehouse/dbt && dbt deps
+
+      - name: dbt build (run + test)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          cd warehouse/dbt
+          dbt build --target prod --select marts.monitoring
+
+      - name: Check SLA compliance
+        run: python scripts/check_sla.py
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ Data Quality Check Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Data Quality Check Failed*\n\nRepository: ${{ github.repository }}\nWorkflow: ${{ github.workflow }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
