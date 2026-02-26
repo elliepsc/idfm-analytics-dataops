@@ -10,13 +10,13 @@ idfm:
       # id: "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre-2025"
 
     ref_stops:
-      id: "referentiel-arret-tc-idf"
+      id: "arrets-lignes"
       fields:
-        stop_id: "id"
-        stop_name: "name"
+        stop_id: "stop_id"
+        stop_name: "stop_name"
         latitude: "stop_lat"
         longitude: "stop_lon"
-        town: "town_name"
+        town: "nom_commune"
 
     ref_lines:
       id: "referentiel-des-lignes"
