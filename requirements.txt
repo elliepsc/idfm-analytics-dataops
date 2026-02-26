@@ -1,0 +1,30 @@
+# Core
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Google Cloud
+google-cloud-bigquery==3.25.0
+google-cloud-storage==2.18.2
+
+# HTTP (requests-retry n'existe pas, on utilise requests avec retry natif)
+requests==2.32.3
+urllib3==2.2.3
+
+# Data processing
+pandas==2.2.3
+pyarrow==17.0.0
+
+# Testing
+pytest==8.3.3
+pytest-cov==5.0.0
+pytest-mock==3.14.0
+
+# Linting
+black==24.8.0
+flake8==7.1.1
+isort==5.13.2
+sqlfluff==3.2.5
+
+# dbt
+dbt-core==1.8.7
+dbt-bigquery==1.8.2

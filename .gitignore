@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment
+.env
+.env.local
+
+# GCP
+credentials/
+*.json
+!config/*.json
+
+# dbt
+warehouse/dbt/target/
+warehouse/dbt/dbt_packages/
+warehouse/dbt/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+*.csv
+*.parquet
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Misc
+*.bak
+*.tmp
+*.old
+*.orig
+*DRAFT*
+
+# Airflow specific
+orchestration/airflow/logs/*
+!orchestration/airflow/logs/.gitkeep
+orchestration/airflow/data/*
+!orchestration/airflow/data/.gitkeep
+orchestration/airflow/.airflowignore
+airflow-webserver.pid
+airflow-scheduler.pid
+standalone_admin_password.txt
+unittests.cfg
+
+
+venv/
+docs/
+
