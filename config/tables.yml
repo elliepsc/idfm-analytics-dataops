@@ -1,0 +1,166 @@
+dimensions:
+  dim_stop:
+    grain: "1 arrêt unique (stop_id)"
+    primary_key: "stop_id"
+    columns:
+      - name: stop_id
+        type: STRING
+        description: "Identifiant unique de l'arrêt"
+      - name: stop_name
+        type: STRING
+        description: "Nom de l'arrêt"
+      - name: latitude
+        type: FLOAT64
+        description: "Latitude (WGS84)"
+      - name: longitude
+        type: FLOAT64
+        description: "Longitude (WGS84)"
+      - name: town
+        type: STRING
+        description: "Commune"
+      - name: updated_at
+        type: TIMESTAMP
+        description: "Dernière mise à jour"
+
+  dim_line:
+    grain: "1 ligne unique (line_id)"
+    primary_key: "line_id"
+    columns:
+      - name: line_id
+        type: STRING
+        description: "Identifiant unique de la ligne"
+      - name: line_name
+        type: STRING
+        description: "Nom de la ligne"
+      - name: transport_mode
+        type: STRING
+        description: "Mode de transport (RER, Métro, Train, etc.)"
+      - name: operator
+        type: STRING
+        description: "Exploitant (RATP, SNCF, etc.)"
+      - name: updated_at
+        type: TIMESTAMP
+        description: "Dernière mise à jour"
+
+  dim_date:
+    grain: "1 jour calendaire"
+    primary_key: "date"
+    description: "Dimension calendaire standard (dbt_date package)"
+
+  dim_ticket_type:
+    grain: "1 catégorie de titre de transport"
+    primary_key: "ticket_type_id"
+    columns:
+      - name: ticket_type_id
+        type: STRING
+      - name: ticket_type_name
+        type: STRING
+
+facts:
+  fct_validations_daily:
+    grain: "1 arrêt × 1 jour × 1 type de titre"
+    primary_key: "CONCAT(stop_id, '-', validation_date, '-', ticket_type)"
+    foreign_keys:
+      - dim_stop(stop_id)
+      - dim_line(line_id)
+      - dim_date(validation_date)
+      - dim_ticket_type(ticket_type)
+    columns:
+      - name: validation_date
+        type: DATE
+        description: "Date de validation"
+      - name: stop_id
+        type: STRING
+      - name: line_id
+        type: STRING
+      - name: ticket_type
+        type: STRING
+      - name: validation_count
+        type: INTEGER
+        description: "Nombre de validations"
+      - name: ingestion_ts
+        type: TIMESTAMP
+        description: "Timestamp d'ingestion (pour freshness monitoring)"
+    partitioning:
+      field: "validation_date"
+      type: "DAY"
+    clustering:
+      - "stop_id"
+      - "line_id"
+      - "ticket_type"
+
+  fct_punctuality_monthly:
+    grain: "1 ligne × 1 mois"
+    primary_key: "CONCAT(line_id, '-', month_date)"
+    foreign_keys:
+      - dim_line(line_id)
+    columns:
+      - name: month_date
+        type: DATE
+        description: "Premier jour du mois"
+      - name: line_id
+        type: STRING
+      - name: punctuality_rate
+        type: FLOAT64
+        description: "Taux de régularité (0-100)"
+      - name: trains_planned
+        type: INTEGER
+      - name: trains_departed
+        type: INTEGER
+      - name: ingestion_ts
+        type: TIMESTAMP
+    partitioning:
+      field: "month_date"
+      type: "MONTH"
+    clustering:
+      - "line_id"
+
+marts:
+  mart_network_scorecard_monthly:
+    grain: "1 ligne × 1 mois (demand + quality)"
+    description: "Scorecard réseau combinant demande et qualité"
+    columns:
+      - name: month_date
+        type: DATE
+      - name: line_id
+        type: STRING
+      - name: line_name
+        type: STRING
+      - name: transport_mode
+        type: STRING
+      - name: total_validations
+        type: INTEGER
+        description: "Total validations du mois"
+      - name: avg_daily_validations
+        type: FLOAT64
+      - name: punctuality_rate
+        type: FLOAT64
+      - name: mom_validation_growth
+        type: FLOAT64
+        description: "Croissance month-over-month (%)"
+      - name: risk_score
+        type: FLOAT64
+        description: "Score de risque (validations baisse + ponctualité dégradée)"
+      - name: ingestion_ts
+        type: TIMESTAMP
+
+  fct_data_health_daily:
+    grain: "1 table × 1 date"
+    description: "Monitoring qualité des données (freshness, volume, SLA)"
+    columns:
+      - name: table_name
+        type: STRING
+      - name: metric_date
+        type: DATE
+      - name: row_count
+        type: INTEGER
+      - name: freshness_hours
+        type: FLOAT64
+      - name: null_percentage
+        type: FLOAT64
+      - name: duplicate_count
+        type: INTEGER
+      - name: sla_hours
+        type: INTEGER
+      - name: sla_met
+        type: BOOLEAN
