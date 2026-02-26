@@ -87,4 +87,5 @@ unittests.cfg
 
 venv/
 docs/
-
+google-cloud-sdk/
+*.py.backup

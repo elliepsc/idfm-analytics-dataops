@@ -2,6 +2,7 @@ import logging
 import json
 from datetime import datetime
 from pathlib import Path
+from xmlrpc import client
 from dotenv import load_dotenv
 import yaml
 
@@ -32,11 +33,22 @@ def extract_ref_stop_lines(output_dir: str = 'data/bronze/referentials'):
     )
 
     fields = dataset_config['fields']
-    select_clause = ', '.join(fields.values())
+    # select_clause = ', '.join(fields.values())
 
-    logger.info("Extracting reference data: stop-line mapping")
+    # logger.info("Extracting reference data: stop-line mapping")
 
-    records = client.get_all_records(select=select_clause)
+    # records = client.get_all_records(select=select_clause)
+    # Build select clause - TEMPORAIREMENT DÉSACTIVÉ
+    # select_clause = ", ".join([
+    #     field_mapping.get(field, field)
+    #     for field in fields
+    # ])
+
+    # logger.info(f"Extracting reference data: {reference_type}")
+    logger.info("Extracting reference data: stops")
+
+    # Get all records - SANS SELECT POUR TESTER
+    records = client.get_all_records(select=None)  # ← Change ici
 
     if not records:
         logger.warning("No records found")

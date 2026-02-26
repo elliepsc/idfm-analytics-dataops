@@ -1,7 +1,10 @@
+from http import client
 import logging
 import json
 from datetime import datetime
 from pathlib import Path
+
+from attrs import fields
 from dotenv import load_dotenv
 import yaml
 
@@ -35,10 +38,16 @@ def extract_ref_stops(output_dir: str = 'data/bronze/referentials'):
     )
 
     fields = dataset_config['fields']
-    select_clause = ', '.join(fields.values())
+
+    # Build field mapping: {target: source}
+    field_mapping = {target: source for target, source in fields.items()}
+
+    # Build select clause with source field names
+    select_clause = ", ".join(fields.values())
 
     logger.info("Extracting reference data: stops")
 
+    # Get all records with field selection
     records = client.get_all_records(select=select_clause)
 
     if not records:
@@ -46,7 +55,17 @@ def extract_ref_stops(output_dir: str = 'data/bronze/referentials'):
         return
 
     field_mapping = {target: source for target, source in fields.items()}
-    extracted = client.extract_fields(records, field_mapping)
+
+    extracted = []
+    for record in records:
+        # API returns fields directly at root level (not in record['record']['fields'])
+        extracted_record = {}
+        for target_field, source_field in field_mapping.items():
+            extracted_record[target_field] = record.get(source_field)
+
+        extracted_record['ingestion_ts'] = datetime.utcnow().isoformat()
+        extracted_record['source'] = 'idfm_ref_stops'
+        extracted.append(extracted_record)
 
     for record in extracted:
         record['ingestion_ts'] = datetime.utcnow().isoformat()
