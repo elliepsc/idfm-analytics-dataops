@@ -1,0 +1,53 @@
+name: 'transport_scorecard'
+version: '1.0.0'
+config-version: 2
+
+profile: 'transport'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+models:
+  transport_scorecard:
+    # Staging - views transitoires
+    staging:
+      +materialized: view
+      +schema: staging
+
+    # Core - tables physiques
+    core:
+      +materialized: table
+      +schema: core
+      dimensions:
+        +materialized: table
+      facts:
+        +materialized: incremental
+        +on_schema_change: "append_new_columns"
+        +incremental_strategy: "insert_overwrite"
+        +partition_by:
+          field: "date"
+          data_type: "date"
+          granularity: "day"
+
+    # Marts - tables optimisées pour BI
+    marts:
+      +materialized: table
+      +schema: analytics
+      business:
+        +materialized: table
+      monitoring:
+        +materialized: table
+
+vars:
+  # Dates de référence pour développement
+  dev_start_date: '2024-01-01'
+  dev_end_date: '2024-12-31'
