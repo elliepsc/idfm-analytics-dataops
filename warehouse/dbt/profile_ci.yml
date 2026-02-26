@@ -1,0 +1,11 @@
+transport_ci:
+  target: ci
+  outputs:
+    ci:
+      type: bigquery
+      method: oauth
+      project: dummy-project
+      dataset: dummy_dataset
+      location: EU
+      threads: 1
+      priority: interactive
