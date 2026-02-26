@@ -1,0 +1,336 @@
+# Tests et documentation des modèles dbt
+models:
+  # ─────────────────────────────────────────────────────────────
+  # STAGING
+  # ─────────────────────────────────────────────────────────────
+  - name: stg_validations_rail_daily
+    description: "Validations réseau ferré - données staging nettoyées"
+    columns:
+      - name: validation_date
+        description: "Date de validation"
+        tests:
+          - not_null
+      - name: stop_id
+        description: "Identifiant arrêt"
+        tests:
+          - not_null
+      - name: validation_count
+        description: "Nombre de validations"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+  - name: stg_punctuality_monthly
+    description: "Ponctualité Transilien - données staging nettoyées"
+    columns:
+      - name: month_date
+        description: "Premier jour du mois"
+        tests:
+          - not_null
+      - name: line_id
+        description: "Identifiant ligne"
+        tests:
+          - not_null
+      - name: punctuality_rate
+        description: "Taux de régularité (%)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+
+  # ─────────────────────────────────────────────────────────────
+  # CORE - DIMENSIONS
+  # ─────────────────────────────────────────────────────────────
+  - name: dim_stop
+    description: |
+      **Dimension des arrêts**
+
+      **Grain**: 1 arrêt unique (stop_id)
+
+      **Source**: IDFM référentiel arrêts
+
+      **Refresh**: Quotidien (TRUNCATE + reload)
+
+      **Usage**: Jointure avec fct_validations_daily
+    columns:
+      - name: stop_id
+        description: "Identifiant unique de l'arrêt (PK)"
+        tests:
+          - not_null
+          - unique
+      - name: stop_name
+        description: "Nom de l'arrêt"
+        tests:
+          - not_null
+      - name: latitude
+        description: "Latitude WGS84"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 48.0
+              max_value: 49.5
+      - name: longitude
+        description: "Longitude WGS84"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1.5
+              max_value: 3.5
+
+  - name: dim_line
+    description: |
+      **Dimension des lignes**
+
+      **Grain**: 1 ligne unique (line_id)
+
+      **Source**: IDFM référentiel lignes
+
+      **Refresh**: Quotidien (TRUNCATE + reload)
+    columns:
+      - name: line_id
+        description: "Identifiant unique de la ligne (PK)"
+        tests:
+          - not_null
+          - unique
+      - name: line_name
+        description: "Nom de la ligne"
+        tests:
+          - not_null
+      - name: transport_mode
+        description: "Mode de transport (RER, METRO, TRAIN, etc.)"
+      - name: operator
+        description: "Exploitant (RATP, SNCF, etc.)"
+
+  - name: dim_ticket_type
+    description: |
+      **Dimension des types de titres**
+
+      **Grain**: 1 catégorie de titre unique
+
+      **Source**: Extrait des validations (DISTINCT)
+    columns:
+      - name: ticket_type_id
+        description: "Identifiant surrogate (PK)"
+        tests:
+          - not_null
+          - unique
+      - name: ticket_type_name
+        description: "Nom de la catégorie"
+        tests:
+          - not_null
+
+  # ─────────────────────────────────────────────────────────────
+  # CORE - FACTS
+  # ─────────────────────────────────────────────────────────────
+  - name: fct_validations_daily
+    description: |
+      **Fait des validations quotidiennes**
+
+      **Grain**: 1 arrêt × 1 jour × 1 type de titre
+
+      **Clé primaire**: validation_key (surrogate)
+
+      **Clés étrangères**:
+      - stop_id → dim_stop
+      - line_id → dim_line
+      - ticket_type → dim_ticket_type
+
+      **Partitionnement**: Par validation_date (DAY)
+
+      **Clustering**: stop_id, line_id, ticket_type
+
+      **Matérialisation**: Incremental (INSERT_OVERWRITE sur nouvelles dates)
+
+      **Refresh**: Quotidien
+
+      **Rétention**: 2 ans
+    columns:
+      - name: validation_key
+        description: "Clé surrogate unique (PK)"
+        tests:
+          - not_null
+          - unique
+      - name: validation_date
+        description: "Date de validation (partition key)"
+        tests:
+          - not_null
+      - name: stop_id
+        description: "FK → dim_stop"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_stop')
+              field: stop_id
+      - name: line_id
+        description: "FK → dim_line"
+        tests:
+          - relationships:
+              to: ref('dim_line')
+              field: line_id
+      - name: validation_count
+        description: "Nombre de validations"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: ingestion_ts
+        description: "Timestamp d'ingestion (pour freshness monitoring)"
+        tests:
+          - not_null
+
+  - name: fct_punctuality_monthly
+    description: |
+      **Fait de la ponctualité mensuelle**
+
+      **Grain**: 1 ligne × 1 mois
+
+      **Clé primaire**: punctuality_key (surrogate)
+
+      **Clés étrangères**:
+      - line_id → dim_line
+
+      **Partitionnement**: Par month_date (MONTH)
+
+      **Clustering**: line_id
+
+      **Matérialisation**: Incremental
+
+      **Refresh**: Mensuel (+ 5 jours après fin de mois)
+    columns:
+      - name: punctuality_key
+        description: "Clé surrogate unique (PK)"
+        tests:
+          - not_null
+          - unique
+      - name: month_date
+        description: "Premier jour du mois (partition key)"
+        tests:
+          - not_null
+      - name: line_id
+        description: "FK → dim_line"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_line')
+              field: line_id
+      - name: punctuality_rate
+        description: "Taux de régularité (0-100%)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+
+  # ─────────────────────────────────────────────────────────────
+  # MARTS - BUSINESS
+  # ─────────────────────────────────────────────────────────────
+  - name: mart_network_scorecard_monthly
+    description: |
+      **Scorecard réseau mensuel**
+
+      **Grain**: 1 ligne × 1 mois
+
+      **Combine**:
+      - Demand metrics (validations)
+      - Quality metrics (ponctualité)
+      - Risk indicators
+
+      **Usage**: Dashboard principal / Alerting
+
+      **Refresh**: Quotidien
+
+      **KPI clés**:
+      - Total validations
+      - Avg daily validations
+      - MoM growth %
+      - Punctuality rate
+      - Risk category
+    columns:
+      - name: month_date
+        description: "Mois de référence"
+        tests:
+          - not_null
+      - name: line_id
+        description: "Identifiant ligne"
+        tests:
+          - not_null
+      - name: total_validations
+        description: "Total validations du mois"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: punctuality_rate
+        description: "Taux de régularité (%)"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+              severity: warn
+      - name: risk_category
+        description: "Catégorie de risque (high/medium/low)"
+        tests:
+          - accepted_values:
+              values: ['high_risk', 'medium_risk', 'low_risk']
+
+  # ─────────────────────────────────────────────────────────────
+  # MARTS - MONITORING
+  # ─────────────────────────────────────────────────────────────
+  - name: fct_data_health_daily
+    description: |
+      **Monitoring quotidien de la santé des données**
+
+      **Grain**: 1 table × 1 date
+
+      **Métriques trackées**:
+      - Row count
+      - Freshness (hours since last ingestion)
+      - Null percentage
+      - Duplicate count
+      - SLA compliance
+
+      **SLA par table**:
+      - fct_validations_daily: 30h
+      - fct_punctuality_monthly: 45 jours
+      - mart_network_scorecard_monthly: 45 jours
+
+      **Usage**: CI/CD data-quality checks
+    columns:
+      - name: table_name
+        description: "Nom de la table monitorée"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['fct_validations_daily', 'fct_punctuality_monthly', 'mart_network_scorecard_monthly']
+      - name: metric_date
+        description: "Date du snapshot monitoring"
+        tests:
+          - not_null
+      - name: row_count
+        description: "Nombre de lignes dans la table"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: freshness_hours
+        description: "Heures depuis dernière ingestion"
+        tests:
+          - not_null
+      - name: sla_hours
+        description: "SLA cible (heures)"
+        tests:
+          - not_null
+      - name: sla_met
+        description: "SLA respecté (booléen)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]

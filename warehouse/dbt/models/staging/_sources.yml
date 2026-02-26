@@ -1,0 +1,53 @@
+sources:
+  - name: raw
+    description: "Tables RAW issues de l'ingestion"
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET_RAW', 'transport_raw') }}"
+
+    tables:
+      - name: raw_validations
+        description: "Validations réseau ferré (daily)"
+        columns:
+          - name: date
+            description: "Date de validation"
+            tests:
+              - not_null
+          - name: stop_id
+            description: "Identifiant arrêt"
+          - name: validation_count
+            description: "Nombre de validations"
+            tests:
+              - not_null
+
+      - name: raw_punctuality
+        description: "Ponctualité Transilien (monthly)"
+        columns:
+          - name: month
+            description: "Mois (premier jour)"
+            tests:
+              - not_null
+          - name: line_id
+            description: "Identifiant ligne"
+          - name: punctuality_rate
+            description: "Taux de régularité (%)"
+
+      - name: raw_ref_stops
+        description: "Référentiel des arrêts"
+        columns:
+          - name: stop_id
+            description: "Identifiant unique arrêt"
+            tests:
+              - not_null
+              - unique
+
+      - name: raw_ref_lines
+        description: "Référentiel des lignes"
+        columns:
+          - name: line_id
+            description: "Identifiant unique ligne"
+            tests:
+              - not_null
+              - unique
+
+      - name: raw_ref_stop_lines
+        description: "Mapping arrêts ↔ lignes"
