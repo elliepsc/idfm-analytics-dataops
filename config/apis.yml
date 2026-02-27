@@ -2,13 +2,32 @@ idfm:
   base_url: "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
 
   datasets:
+    # -------------------------------------------------------------------------
+    # VALIDATIONS RÉSEAU FERRÉ
+    # Dataset sans suffixe d'année = dataset "courant", mis à jour chaque trim.
+    # Vérifié par curl le 2026-02-27 : 469,376 records, champs à la racine
+    # ⚠️  Ce dataset couvre le trimestre en cours uniquement.
+    #     Pour données historiques > 1 trimestre, enchaîner plusieurs datasets :
+    #     validations-reseau-ferre-nombre-validations-par-jour-{N}eme-trimestre
+    # -------------------------------------------------------------------------
     validations_rail:
-      # ⚠️ ATTENTION : Dataset ID change par trimestre !
-      # Utiliser le dataset historique OU mettre à jour chaque trimestre
-      id: "histo-validations-reseau-ferre"  # Historique 2015-2024
-      # Alternative pour données récentes :
-      # id: "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre-2025"
+      id: "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre"
+      fields:
+        date: "jour"                      # YYYY-MM-DD
+        stop_id: "code_stif_arret"        # ID arrêt STIF (ex: "401")
+        stop_name: "libelle_arret"        # Nom lisible (ex: "LA HACQUINIERE")
+        line_code_trns: "code_stif_trns"  # Code transport STIF (ex: "810")
+        line_code_res: "code_stif_res"    # Code réseau STIF (ex: "802")
+        ticket_type: "categorie_titre"    # Type de titre (ex: "Amethyste")
+        validation_count: "nb_vald"       # Nombre de validations (int)
+      filters:
+        date_field: "jour"
 
+    # -------------------------------------------------------------------------
+    # RÉFÉRENTIEL ARRÊTS
+    # Dataset dénormalisé : 1 stop peut avoir N lignes → doublons normaux
+    # Vérifié V1 : 73,840 records bruts → 8,526 stops uniques
+    # -------------------------------------------------------------------------
     ref_stops:
       id: "arrets-lignes"
       fields:
@@ -18,6 +37,9 @@ idfm:
         longitude: "stop_lon"
         town: "nom_commune"
 
+    # -------------------------------------------------------------------------
+    # RÉFÉRENTIEL LIGNES
+    # -------------------------------------------------------------------------
     ref_lines:
       id: "referentiel-des-lignes"
       fields:
@@ -26,6 +48,9 @@ idfm:
         transport_mode: "transportmode"
         operator: "operatorname"
 
+    # -------------------------------------------------------------------------
+    # RÉFÉRENTIEL ARRÊTS-LIGNES (jointure)
+    # -------------------------------------------------------------------------
     ref_stop_lines:
       id: "arrets-lignes"
       fields:
@@ -36,14 +61,20 @@ transilien:
   base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
 
   datasets:
+    # -------------------------------------------------------------------------
+    # PONCTUALITÉ MENSUELLE TRANSILIEN
+    # Vérifié par curl le 2026-02-27 : 1,983 records
+    # Format date : YYYY-MM (pas YYYY-MM-DD !)
+    # ⚠️  taux_regularite n'existe PAS → c'est taux_de_ponctualite
+    # ⚠️  nombre_de_trains_prevu / partis n'existent PAS dans ce dataset
+    # -------------------------------------------------------------------------
     punctuality:
       id: "ponctualite-mensuelle-transilien"
       fields:
-        month: "date"
-        line_id: "ligne"
-        line_name: "libelle_ligne"
-        punctuality_rate: "taux_regularite"
-        trains_planned: "nombre_de_trains_prevu"
-        trains_departed: "nombre_de_trains_partis"
+        month: "date"                              # Format YYYY-MM (ex: "2013-01")
+        service: "service"                         # Type réseau (ex: "RER")
+        line_id: "ligne"                           # Code ligne (ex: "A")
+        line_name: "nom_de_la_ligne"               # Nom complet (ex: "RER A")
+        punctuality_rate: "taux_de_ponctualite"    # % ponctualité (ex: 83.6)
       filters:
         date_field: "date"
