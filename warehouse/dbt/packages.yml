@@ -1,0 +1,18 @@
+# dbt package dependencies
+# Install with: dbt deps (from warehouse/dbt/)
+#
+# FIX V2: file renamed from package.yml → packages.yml
+# dbt looks for 'packages.yml' exactly — 'package.yml' is silently ignored,
+# causing 'dbt deps' to do nothing and generate_surrogate_key() to fail at runtime.
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.1.1
+    # Provides: generate_surrogate_key(), star(), pivot(), etc.
+    # Used in: fct_validations_daily, fct_punctuality_monthly (surrogate keys)
+
+  # FIX V2: calogica/dbt_date is deprecated — replaced by godatadriven/dbt_date
+  # Same API, same macros, just maintained under a new org
+  - package: godatadriven/dbt_date
+    version: 0.10.0
+    # Provides: date spine, date parts, fiscal calendar macros
+    # Used in: dim_date model

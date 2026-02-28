@@ -1,20 +1,10 @@
 transport:
   target: dev
   outputs:
-    # dev:
-    #   type: bigquery
-    #   method: service-account
-    #   project: "{{ env_var('GCP_PROJECT_ID') }}"
-    #   dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}"
-    #   location: EU
-    #   threads: 4
-    #   timeout_seconds: 300
-    #   priority: interactive
-    #   keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
     dev:
       type: bigquery
       method: oauth
-      project: idfm-analytics-dev-488611  # ← Mets ton vrai project ID ici
+      project: idfm-analytics-dev-488611
       dataset: transport_analytics
       threads: 4
       timeout_seconds: 300

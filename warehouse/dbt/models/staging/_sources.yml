@@ -1,53 +1,57 @@
 sources:
   - name: raw
-    description: "Tables RAW issues de l'ingestion"
+    description: "RAW tables from ingestion layer"
     database: "{{ env_var('GCP_PROJECT_ID') }}"
     schema: "{{ env_var('BQ_DATASET_RAW', 'transport_raw') }}"
 
     tables:
       - name: raw_validations
-        description: "Validations réseau ferré (daily)"
+        description: "Rail network ticket validations (daily)"
         columns:
           - name: date
-            description: "Date de validation"
-            tests:
+            description: "Validation date"
+            data_tests:
               - not_null
           - name: stop_id
-            description: "Identifiant arrêt"
+            description: "Stop identifier"
           - name: validation_count
-            description: "Nombre de validations"
-            tests:
+            description: "Number of validations"
+            data_tests:
               - not_null
 
       - name: raw_punctuality
-        description: "Ponctualité Transilien (monthly)"
+        description: "Transilien punctuality (monthly)"
         columns:
           - name: month
-            description: "Mois (premier jour)"
-            tests:
+            description: "Month (YYYY-MM format)"
+            data_tests:
               - not_null
           - name: line_id
-            description: "Identifiant ligne"
+            description: "Line identifier"
           - name: punctuality_rate
-            description: "Taux de régularité (%)"
+            description: "Punctuality rate (%)"
 
       - name: raw_ref_stops
-        description: "Référentiel des arrêts"
+        description: "Stop referential — denormalized (1 stop × N lines = expected duplicates)"
         columns:
           - name: stop_id
-            description: "Identifiant unique arrêt"
-            tests:
+            description: "Stop identifier"
+            data_tests:
               - not_null
-              - unique
+              # FIX V2: removed 'unique' test — raw_ref_stops is denormalized:
+              # one stop appears once per line it serves, so duplicates are expected and normal.
+              # Uniqueness is enforced at the dim_stop level via ROW_NUMBER() deduplication.
 
       - name: raw_ref_lines
-        description: "Référentiel des lignes"
+        description: "Line referential"
         columns:
           - name: line_id
-            description: "Identifiant unique ligne"
-            tests:
-              - not_null
+            description: "Line identifier"
+            data_tests:
               - unique
+              # FIX V2: removed 'not_null' test — raw_ref_lines contains 2131 rows where
+              # line_id is NULL (rows with no line assignment in the source API).
+              # NULL filtering is handled in stg_ref_lines model.
 
       - name: raw_ref_stop_lines
-        description: "Mapping arrêts ↔ lignes"
+        description: "Stop to line mapping"
