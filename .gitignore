@@ -91,3 +91,10 @@ google-cloud-sdk/
 *.py.backup
 *.ylm.backup
 
+warehouse/dbt/dbt_packages/
+warehouse/dbt/dbt_internal_packages/
+
+
+warehouse/dbt/dbt_packages/
+warehouse/dbt/dbt_internal_packages/
+warehouse/dbt/dbt_internal_packages/
