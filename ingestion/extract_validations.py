@@ -1,17 +1,13 @@
 """
-Extract ticket validations data from IDFM rail network
+Extract ticket validations data from IDFM rail network.
 
 Dataset: validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre
-(Validations on rail network - number of validations per day, current quarter)
+API structure confirmed 2026-02-27: fields at ROOT level of each record.
+Example: {"jour": "2025-03-12", "code_stif_arret": "401", "nb_vald": 12, ...}
 
-API structure confirmed 2026-02-27:
-  Fields are at ROOT level of each record (not nested in record['record']['fields'])
-  Example record: {"jour": "2025-03-12", "code_stif_arret": "401", "nb_vald": 12, ...}
-
-This script:
-1. Connects to IDFM Opendatasoft API
-2. Fetches validation records for a date range
-3. Saves raw data to JSON files (bronze layer)
+Usage:
+    python ingestion/extract_validations.py --start 2025-01-01 --end 2025-01-31
+    python ingestion/extract_validations.py --start 2025-01-01 --end 2025-01-01 --output /tmp/data
 """
 
 import argparse
@@ -20,6 +16,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
+import os
 import yaml
 
 from odsv2_client import ODSv2Client
@@ -32,22 +29,29 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+# FIX V2: resolve project root from env var first, fall back to script location.
+# - PROJECT_ROOT in .env → used in Airflow, CI/CD, or any non-standard layout
+# - Path(__file__).parent.parent → automatic fallback for local dev (no config needed)
+# This pattern ensures output always lands in data/bronze/validations/ at project root,
+# regardless of which directory you call the script from.
+PROJECT_ROOT = Path(os.getenv('PROJECT_ROOT', Path(__file__).parent.parent))
+
 
 def load_config():
-    """Load API configuration from YAML file"""
-    config_path = Path(__file__).parent.parent / 'config' / 'apis.yml'
+    """Load API configuration from YAML file."""
+    config_path = PROJECT_ROOT / 'config' / 'apis.yml'
     with open(config_path) as f:
         return yaml.safe_load(f)
 
 
-def extract_validations(start_date: str, end_date: str, output_dir: str = 'data/bronze/validations'):
+def extract_validations(start_date: str, end_date: str, output_dir: Path = None):
     """
     Extract rail network ticket validations between two dates.
 
     Args:
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
-        output_dir: Output directory for JSON files
+        output_dir: Output directory (default: PROJECT_ROOT/data/bronze/validations)
     """
     config = load_config()
     idfm_config = config['idfm']
@@ -78,21 +82,18 @@ def extract_validations(start_date: str, end_date: str, output_dir: str = 'data/
         logger.warning("No records found for the specified date range")
         return
 
-    # FIXED V2: ODS API v2.1 returns fields at ROOT level of each record.
-    # Do NOT use client.extract_fields() which expects nested record['record']['fields'].
-    # Instead, read directly from record root, as confirmed by curl 2026-02-27.
+    # FIXED V2: fields at ROOT level — do not use client.extract_fields()
+    # which expects nested record['record']['fields'] (old ODS v1 structure).
     extracted = []
     for record in records:
-        extracted_record = {}
-        for target_field, source_field in fields.items():
-            extracted_record[target_field] = record.get(source_field)
-
-        # FIXED V2: datetime.utcnow() is deprecated in Python 3.12+
+        extracted_record = {target: record.get(source) for target, source in fields.items()}
+        # FIXED V2: datetime.utcnow() deprecated in Python 3.12+
         extracted_record['ingestion_ts'] = datetime.now(timezone.utc).isoformat()
         extracted_record['source'] = 'idfm_validations_rail'
         extracted.append(extracted_record)
 
-    output_path = Path(output_dir)
+    # FIX V2: default output path anchored to PROJECT_ROOT, not working directory
+    output_path = Path(output_dir) if output_dir else PROJECT_ROOT / 'data/bronze/validations'
     output_path.mkdir(parents=True, exist_ok=True)
 
     filename = f"validations_{start_date}_{end_date}.json"
@@ -105,19 +106,18 @@ def extract_validations(start_date: str, end_date: str, output_dir: str = 'data/
 
 
 def main():
-    """CLI entry point"""
     parser = argparse.ArgumentParser(
         description='Extract IDFM rail network ticket validations',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example usage:
-  python extract_validations.py --start 2025-01-01 --end 2025-01-01
-  python extract_validations.py --start 2025-01-01 --end 2025-01-31 --output /tmp/data
+  python extract_validations.py --start 2025-01-01 --end 2025-01-31
+  python extract_validations.py --start 2025-01-01 --end 2025-01-01 --output /tmp/data
         """
     )
     parser.add_argument('--start', required=True, help='Start date (YYYY-MM-DD)')
     parser.add_argument('--end', required=True, help='End date (YYYY-MM-DD)')
-    parser.add_argument('--output', default='data/bronze/validations', help='Output directory')
+    parser.add_argument('--output', default=None, help='Output directory (default: PROJECT_ROOT/data/bronze/validations)')
 
     args = parser.parse_args()
     extract_validations(args.start, args.end, args.output)
