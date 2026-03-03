@@ -17,7 +17,6 @@ import argparse
 import io  # FIX V2: needed for in-memory NDJSON buffer
 import json
 import logging
-
 # FIX V2: removed unused 'from google.cloud.exceptions import NotFound' (V1 leftover)
 import os
 from pathlib import Path
