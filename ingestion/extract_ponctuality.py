@@ -16,19 +16,18 @@ Usage:
 """
 
 import argparse
-import logging
 import json
+import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
-from dotenv import load_dotenv
-import os
-import yaml
 
+import yaml
+from dotenv import load_dotenv
 from odsv2_client import ODSv2Client
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -37,12 +36,12 @@ load_dotenv()
 # FIX V2: resolve project root from env var first, fall back to script location.
 # - PROJECT_ROOT in .env → used in Airflow, CI/CD, or any non-standard layout
 # - Path(__file__).parent.parent → automatic fallback for local dev (no config needed)
-PROJECT_ROOT = Path(os.getenv('PROJECT_ROOT', Path(__file__).parent.parent))
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).parent.parent))
 
 
 def load_config():
     """Load API configuration from YAML file."""
-    config_path = PROJECT_ROOT / 'config' / 'apis.yml'
+    config_path = PROJECT_ROOT / "config" / "apis.yml"
     with open(config_path) as f:
         return yaml.safe_load(f)
 
@@ -57,30 +56,27 @@ def extract_punctuality(start_date: str, end_date: str, output_dir: Path = None)
         output_dir: Output directory (default: PROJECT_ROOT/data/bronze/punctuality)
     """
     config = load_config()
-    transilien_config = config['transilien']
-    dataset_config = transilien_config['datasets']['punctuality']
+    transilien_config = config["transilien"]
+    dataset_config = transilien_config["datasets"]["punctuality"]
 
     client = ODSv2Client(
-        base_url=transilien_config['base_url'],
-        dataset_id=dataset_config['id']
+        base_url=transilien_config["base_url"], dataset_id=dataset_config["id"]
     )
 
     # Date field is YYYY-MM format — truncate if full date passed
-    date_field = dataset_config['filters']['date_field']
+    date_field = dataset_config["filters"]["date_field"]
     start_month = start_date[:7]
     end_month = end_date[:7]
     where_clause = f"{date_field} >= '{start_month}' AND {date_field} <= '{end_month}'"
 
-    fields = dataset_config['fields']
-    select_clause = ', '.join(fields.values())
+    fields = dataset_config["fields"]
+    select_clause = ", ".join(fields.values())
 
     logger.info(f"Extracting punctuality from {start_month} to {end_month}")
     logger.info(f"Dataset: {dataset_config['id']}")
 
     records = client.get_all_records(
-        where=where_clause,
-        select=select_clause,
-        order_by=f"{date_field} ASC"
+        where=where_clause, select=select_clause, order_by=f"{date_field} ASC"
     )
 
     if not records:
@@ -90,20 +86,24 @@ def extract_punctuality(start_date: str, end_date: str, output_dir: Path = None)
     # FIXED V2: fields at ROOT level — do not use client.extract_fields()
     extracted = []
     for record in records:
-        extracted_record = {target: record.get(source) for target, source in fields.items()}
+        extracted_record = {
+            target: record.get(source) for target, source in fields.items()
+        }
         # FIXED V2: datetime.utcnow() deprecated in Python 3.12+
-        extracted_record['ingestion_ts'] = datetime.now(timezone.utc).isoformat()
-        extracted_record['source'] = 'transilien_punctuality'
+        extracted_record["ingestion_ts"] = datetime.now(timezone.utc).isoformat()
+        extracted_record["source"] = "transilien_punctuality"
         extracted.append(extracted_record)
 
     # FIX V2: default output path anchored to PROJECT_ROOT, not working directory
-    output_path = Path(output_dir) if output_dir else PROJECT_ROOT / 'data/bronze/punctuality'
+    output_path = (
+        Path(output_dir) if output_dir else PROJECT_ROOT / "data/bronze/punctuality"
+    )
     output_path.mkdir(parents=True, exist_ok=True)
 
     filename = f"punctuality_{start_month}_{end_month}.json"
     filepath = output_path / filename
 
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         json.dump(extracted, f, indent=2, ensure_ascii=False)
 
     logger.info(f"✅ Saved {len(extracted)} records to {filepath}")
@@ -111,21 +111,29 @@ def extract_punctuality(start_date: str, end_date: str, output_dir: Path = None)
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Extract Transilien monthly punctuality data',
+        description="Extract Transilien monthly punctuality data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example usage:
   python extract_ponctuality.py --start 2024-01 --end 2024-12
   python extract_ponctuality.py --start 2024-01-01 --end 2024-12-31
-        """
+        """,
     )
-    parser.add_argument('--start', required=True, help='Start month (YYYY-MM or YYYY-MM-DD)')
-    parser.add_argument('--end', required=True, help='End month (YYYY-MM or YYYY-MM-DD)')
-    parser.add_argument('--output', default=None, help='Output directory (default: PROJECT_ROOT/data/bronze/punctuality)')
+    parser.add_argument(
+        "--start", required=True, help="Start month (YYYY-MM or YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--end", required=True, help="End month (YYYY-MM or YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output directory (default: PROJECT_ROOT/data/bronze/punctuality)",
+    )
 
     args = parser.parse_args()
     extract_punctuality(args.start, args.end, args.output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

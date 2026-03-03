@@ -9,13 +9,11 @@ API Reference: https://help.opendatasoft.com/apis/ods-search-v2/
 
 import logging
 import time
-from typing import Dict, List, Optional, Any
-from urllib.parse import urljoin
+from typing import Any, Dict, List, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +35,7 @@ class ODSv2Client:
         dataset_id: str,
         timeout: int = 30,
         max_retries: int = 3,
-        rate_limit_delay: float = 0.5
+        rate_limit_delay: float = 0.5,
     ):
         """
         Initialize Opendatasoft API client
@@ -49,7 +47,7 @@ class ODSv2Client:
             max_retries: Number of retry attempts on failure
             rate_limit_delay: Delay between requests in seconds
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.dataset_id = dataset_id
         self.timeout = timeout
         self.rate_limit_delay = rate_limit_delay
@@ -69,8 +67,12 @@ class ODSv2Client:
         retry_strategy = Retry(
             total=max_retries,
             status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP codes
-            allowed_methods=["HEAD", "GET", "OPTIONS"],  # Only retry on idempotent methods
-            backoff_factor=1  # Wait 1s, 2s, 4s... between retries
+            allowed_methods=[
+                "HEAD",
+                "GET",
+                "OPTIONS",
+            ],  # Only retry on idempotent methods
+            backoff_factor=1,  # Wait 1s, 2s, 4s... between retries
         )
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -85,7 +87,7 @@ class ODSv2Client:
         offset: int = 0,
         where: Optional[str] = None,
         select: Optional[str] = None,
-        order_by: Optional[str] = None
+        order_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Fetch a single page of results
@@ -100,35 +102,30 @@ class ODSv2Client:
         Returns:
             API JSON response
         """
-        params = {
-            'limit': min(limit, 100),  # API enforces max 100
-            'offset': offset
-        }
+        params = {"limit": min(limit, 100), "offset": offset}  # API enforces max 100
 
         if where:
-            params['where'] = where
+            params["where"] = where
         if select:
-            params['select'] = select
+            params["select"] = select
         if order_by:
-            params['order_by'] = order_by
+            params["order_by"] = order_by
 
         try:
             logger.debug(f"GET {self.dataset_url} with params: {params}")
 
             response = self.session.get(
-                self.dataset_url,
-                params=params,
-                timeout=self.timeout
+                self.dataset_url, params=params, timeout=self.timeout
             )
-            
+
             # Handle pagination limit
             try:
                 response.raise_for_status()
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.HTTPError as e:  # noqa: F841
                 if response.status_code == 400 and offset >= 10000:
                     logger.warning(f"Reached pagination limit at offset {offset}")
                     # Return empty response to signal end of pagination
-                    return {'results': [], 'total_count': offset}
+                    return {"results": [], "total_count": offset}
                 else:
                     raise
 
@@ -137,9 +134,11 @@ class ODSv2Client:
 
             return response.json()
 
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError as e:  # noqa: F841
             logger.error(f"HTTP error: {e}")
-            logger.error(f"Response: {e.response.text if e.response else 'No response'}")
+            logger.error(
+                f"Response: {e.response.text if e.response else 'No response'}"
+            )
             raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
@@ -150,7 +149,7 @@ class ODSv2Client:
         where: Optional[str] = None,
         select: Optional[str] = None,
         order_by: Optional[str] = None,
-        max_records: Optional[int] = None
+        max_records: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Fetch ALL results with automatic pagination
@@ -186,13 +185,13 @@ class ODSv2Client:
                 offset=offset,
                 where=where,
                 select=select,
-                order_by=order_by
+                order_by=order_by,
             )
 
             # Parse response
-            records = response.get('results', [])
+            records = response.get("results", [])
             if total_count is None:
-                total_count = response.get('total_count', 0)
+                total_count = response.get("total_count", 0)
                 logger.info(f"Total records available: {total_count}")
 
             if not records:
@@ -212,9 +211,7 @@ class ODSv2Client:
         return all_records
 
     def extract_fields(
-        self,
-        records: List[Dict[str, Any]],
-        field_mapping: Dict[str, str]
+        self, records: List[Dict[str, Any]], field_mapping: Dict[str, str]
     ) -> List[Dict[str, Any]]:
         """
         Extract and rename fields from API records
@@ -234,7 +231,7 @@ class ODSv2Client:
 
         for record in records:
             # Data is nested in record['record']['fields']
-            fields = record.get('record', {}).get('fields', {})
+            fields = record.get("record", {}).get("fields", {})
 
             # Extract only requested fields
             extracted_record = {}
@@ -248,11 +245,11 @@ class ODSv2Client:
         return extracted
 
     def get_all_records_with_filter(
-        self, 
-        filter_field: str, 
-        filter_values: List[str], 
-        select: Optional[str] = None, 
-        max_records: Optional[int] = None
+        self,
+        filter_field: str,
+        filter_values: List[str],
+        select: Optional[str] = None,
+        max_records: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Fetch all records by applying filters to avoid pagination limits.
@@ -274,9 +271,7 @@ class ODSv2Client:
 
             # Fetch with filter
             records = self.get_all_records(
-                select=select,
-                where=where_clause,
-                max_records=max_records
+                select=select, where=where_clause, max_records=max_records
             )
 
             all_records.extend(records)
@@ -290,7 +285,7 @@ class ODSv2Client:
 
         Example: 'address.city' retrieves data['address']['city']
         """
-        keys = field_path.split('.')
+        keys = field_path.split(".")
         value = data
 
         for key in keys:
@@ -319,4 +314,5 @@ class ODSv2Client:
 
 class ODSv2ClientError(Exception):
     """Exception for ODS client errors"""
+
     pass

@@ -1,13 +1,13 @@
 # Vérification des SLA via fct_data_health_daily
+import logging
 import os
 import sys
-from google.cloud import bigquery
+
 from dotenv import load_dotenv
-import logging
+from google.cloud import bigquery
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ def check_sla():
     Vérifie les SLA via la table fct_data_health_daily
     Retourne exit code 1 si breach détecté, 0 sinon
     """
-    project_id = os.getenv('GCP_PROJECT_ID')
-    dataset = os.getenv('BQ_DATASET_ANALYTICS', 'transport_staging_analytics')
+    project_id = os.getenv("GCP_PROJECT_ID")
+    dataset = os.getenv("BQ_DATASET_ANALYTICS", "transport_staging_analytics")
     table = f"{project_id}.{dataset}.fct_data_health_daily"
 
     client = bigquery.Client(project=project_id)
@@ -67,6 +67,6 @@ def check_sla():
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit_code = check_sla()
     sys.exit(exit_code)
