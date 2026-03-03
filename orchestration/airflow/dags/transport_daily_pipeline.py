@@ -12,44 +12,48 @@ DAG Flow:
 5. Alert: Slack notification on success/failure
 """
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
-from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 from datetime import datetime, timedelta
+
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
+from airflow.providers.slack.operators.slack_webhook import \
+    SlackWebhookOperator
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
 # ═════════════════════════════════════════════════════════════════
 
 default_args = {
-    'owner': 'data-team',
-    'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
-    'email_on_failure': True,
-    'email_on_retry': False,
-    'retries': 3,
-    'retry_delay': timedelta(minutes=5),
-    'execution_timeout': timedelta(hours=2),
+    "owner": "data-team",
+    "depends_on_past": False,
+    "start_date": datetime(2024, 1, 1),
+    "email_on_failure": True,
+    "email_on_retry": False,
+    "retries": 3,
+    "retry_delay": timedelta(minutes=5),
+    "execution_timeout": timedelta(hours=2),
 }
 
 # ═════════════════════════════════════════════════════════════════
 # Python Callables
 # ═════════════════════════════════════════════════════════════════
 
+
 def extract_validations(**context):
     """Extract ticket validation data from IDFM API"""
     import sys
-    sys.path.insert(0, '/opt/airflow/ingestion')
+
+    sys.path.insert(0, "/opt/airflow/ingestion")
     from extract_validations import extract_validations
 
     # Get execution date (yesterday for daily run)
-    execution_date = context['ds']  # Format: YYYY-MM-DD
+    execution_date = context["ds"]  # Format: YYYY-MM-DD
 
     extract_validations(
         start_date=execution_date,
         end_date=execution_date,
-        output_dir='/opt/airflow/data/bronze/validations'
+        output_dir="/opt/airflow/data/bronze/validations",
     )
     print(f"✅ Validations extracted for {execution_date}")
 
@@ -57,17 +61,18 @@ def extract_validations(**context):
 def extract_punctuality(**context):
     """Extract train punctuality data from Transilien API"""
     import sys
-    sys.path.insert(0, '/opt/airflow/ingestion')
+
+    sys.path.insert(0, "/opt/airflow/ingestion")
     import extract_ponctuality as mod
 
-    execution_date = context['ds']
+    execution_date = context["ds"]
     # Punctuality is monthly, so extract full month
-    month_start = execution_date[:7] + '-01'  # First day of month
+    month_start = execution_date[:7] + "-01"  # First day of month
 
     mod.extract_punctuality(
         start_date=month_start,
         end_date=execution_date,
-        output_dir='/opt/airflow/data/bronze/punctuality'
+        output_dir="/opt/airflow/data/bronze/punctuality",
     )
     print(f"✅ Punctuality extracted for month starting {month_start}")
 
@@ -78,11 +83,12 @@ def extract_referentials(**context):
     capped at 10,000/73,264 records. See TODO V4 in apis.yml for GTFS alternative.
     """
     import sys
-    sys.path.insert(0, '/opt/airflow/ingestion')
-    from extract_ref_stops import extract_ref_stops
-    from extract_ref_lines import extract_ref_lines
 
-    output_dir = '/opt/airflow/data/bronze/referentials'
+    sys.path.insert(0, "/opt/airflow/ingestion")
+    from extract_ref_lines import extract_ref_lines
+    from extract_ref_stops import extract_ref_stops
+
+    output_dir = "/opt/airflow/data/bronze/referentials"
     extract_ref_stops(output_dir=output_dir)
     extract_ref_lines(output_dir=output_dir)
 
@@ -92,7 +98,8 @@ def extract_referentials(**context):
 def load_to_bigquery(**context):
     """Load JSON files to BigQuery RAW tables"""
     import sys
-    sys.path.insert(0, '/opt/airflow/ingestion')
+
+    sys.path.insert(0, "/opt/airflow/ingestion")
     from load_bigquery_raw import BigQueryLoader
 
     loader = BigQueryLoader()
@@ -104,13 +111,18 @@ def load_to_bigquery(**context):
 def check_sla(**context):
     """Validate data quality: freshness, completeness, validity"""
     import sys
-    sys.path.insert(0, '/opt/airflow/scripts')
+
+    sys.path.insert(0, "/opt/airflow/scripts")
     from check_sla import check_sla
 
     exit_code = check_sla()
 
     if exit_code != 0:
-        import logging; logging.getLogger(__name__).warning("⚠️ SLA breach detected - continuing in dev mode")
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "⚠️ SLA breach detected - continuing in dev mode"
+        )
 
     print("✅ All SLA checks passed")
 
@@ -120,12 +132,12 @@ def check_sla(**context):
 # ═════════════════════════════════════════════════════════════════
 
 with DAG(
-    dag_id='transport_daily_pipeline',
+    dag_id="transport_daily_pipeline",
     default_args=default_args,
-    description='Daily pipeline: Extract → Load → Transform → Validate',
-    schedule_interval='0 2 * * *',  # 2 AM every day
+    description="Daily pipeline: Extract → Load → Transform → Validate",
+    schedule_interval="0 2 * * *",  # 2 AM every day
     catchup=False,  # Don't backfill on enable
-    tags=['transport', 'daily', 'production'],
+    tags=["transport", "daily", "production"],
     max_active_runs=1,  # Only one run at a time
 ) as dag:
 
@@ -134,19 +146,19 @@ with DAG(
     # ─────────────────────────────────────────────────────────────
 
     extract_validations_task = PythonOperator(
-        task_id='extract_validations',
+        task_id="extract_validations",
         python_callable=extract_validations,
         provide_context=True,
     )
 
     extract_punctuality_task = PythonOperator(
-        task_id='extract_punctuality',
+        task_id="extract_punctuality",
         python_callable=extract_punctuality,
         provide_context=True,
     )
 
     extract_referentials_task = PythonOperator(
-        task_id='extract_referentials',
+        task_id="extract_referentials",
         python_callable=extract_referentials,
         provide_context=True,
     )
@@ -156,7 +168,7 @@ with DAG(
     # ─────────────────────────────────────────────────────────────
 
     load_bigquery_task = PythonOperator(
-        task_id='load_bigquery_raw',
+        task_id="load_bigquery_raw",
         python_callable=load_to_bigquery,
         provide_context=True,
     )
@@ -166,17 +178,17 @@ with DAG(
     # ─────────────────────────────────────────────────────────────
 
     dbt_build_task = BashOperator(
-        task_id='dbt_build',
+        task_id="dbt_build",
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
             /home/airflow/.local/bin/dbt deps && /home/airflow/.local/bin/dbt build --target prod --select +marts dim_stop stg_ref_stops
         """,
         env={
-            'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
-            'BQ_DATASET_RAW': 'transport_raw',
-            'BQ_DATASET_STAGING': 'transport_staging',
-            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
+            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
+            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
+            "BQ_DATASET_RAW": "transport_raw",
+            "BQ_DATASET_STAGING": "transport_staging",
+            "BQ_DATASET_ANALYTICS": "transport_staging_analytics",
         },
     )
 
@@ -185,7 +197,7 @@ with DAG(
     # ─────────────────────────────────────────────────────────────
 
     check_sla_task = PythonOperator(
-        task_id='check_sla',
+        task_id="check_sla",
         python_callable=check_sla,
         provide_context=True,
     )
@@ -196,10 +208,15 @@ with DAG(
 
     def notify_success_fn(**context):
         try:
-            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text="Pipeline SUCCESS")
+            from airflow.providers.slack.hooks.slack_webhook import \
+                SlackWebhookHook
+
+            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+                text="Pipeline SUCCESS"
+            )
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Slack skipped: {e}")
         print("Pipeline completed successfully")
 
@@ -214,7 +231,11 @@ with DAG(
     # ─────────────────────────────────────────────────────────────
 
     # Parallel extraction, then sequential processing
-    [extract_validations_task, extract_punctuality_task, extract_referentials_task] >> load_bigquery_task
+    [
+        extract_validations_task,
+        extract_punctuality_task,
+        extract_referentials_task,
+    ] >> load_bigquery_task
 
     # Sequential: Load → Transform → Validate → Notify
     load_bigquery_task >> dbt_build_task >> check_sla_task >> notify_success
@@ -224,14 +245,17 @@ with DAG(
 # Error Handling
 # ═════════════════════════════════════════════════════════════════
 
+
 def task_failure_alert(context):
     """Send Slack alert on task failure — silently skipped if Slack not configured.
     To enable: add 'slack_webhook' connection in Airflow UI (Admin → Connections).
     """
     # FIX V2: wrap in try/except — Slack connection may not be configured in dev/local
     try:
-        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-        slack_hook = SlackWebhookHook(slack_webhook_conn_id='slack_webhook')
+        from airflow.providers.slack.hooks.slack_webhook import \
+            SlackWebhookHook
+
+        slack_hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
         slack_hook.send(
             text=(
                 f"❌ *Transport Daily Pipeline - FAILED*\n\n"
@@ -240,10 +264,11 @@ def task_failure_alert(context):
                 f"⚠️ Error: {context['exception']}\n"
                 f"🔗 Log: {context['task_instance'].log_url}"
             ),
-            channel='#data-alerts'
+            channel="#data-alerts",
         )
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning(
             f"Slack alert skipped (slack_webhook connection not configured): {e}"
         )

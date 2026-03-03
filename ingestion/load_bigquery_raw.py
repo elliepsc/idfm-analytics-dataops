@@ -14,14 +14,15 @@ Usage:
 """
 
 import argparse
-import logging
+import io  # FIX V2: needed for in-memory NDJSON buffer
 import json
-import io                          # FIX V2: needed for in-memory NDJSON buffer
-from pathlib import Path
-from google.cloud import bigquery
+import logging
 # FIX V2: removed unused 'from google.cloud.exceptions import NotFound' (V1 leftover)
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
+from google.cloud import bigquery
 
 # FIX V2: anchor paths to the script location, not the working directory.
 # Path(__file__) = absolute path of this script (ingestion/load_bigquery_raw.py)
@@ -31,8 +32,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).parent.parent
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ class BigQueryLoader:
     """Load Bronze JSON files into BigQuery RAW tables."""
 
     def __init__(self):
-        self.project_id = os.getenv('GCP_PROJECT_ID')
-        self.dataset_raw = os.getenv('BQ_DATASET_RAW', 'transport_raw')
+        self.project_id = os.getenv("GCP_PROJECT_ID")
+        self.dataset_raw = os.getenv("BQ_DATASET_RAW", "transport_raw")
         self.client = bigquery.Client(project=self.project_id)
         logger.info(f"Initialized loader for {self.project_id}.{self.dataset_raw}")
 
@@ -67,18 +67,20 @@ class BigQueryLoader:
         Returns:
             BytesIO buffer containing NDJSON data
         """
-        with open(json_file, 'r', encoding='utf-8') as f:
+        with open(json_file, "r", encoding="utf-8") as f:
             records = json.load(f)
 
-        ndjson_lines = '\n'.join(json.dumps(record, ensure_ascii=False) for record in records)
-        return io.BytesIO(ndjson_lines.encode('utf-8'))
+        ndjson_lines = "\n".join(
+            json.dumps(record, ensure_ascii=False) for record in records
+        )
+        return io.BytesIO(ndjson_lines.encode("utf-8"))
 
     def load_json_to_table(
         self,
         json_file: Path,
         table_name: str,
         schema: list = None,
-        write_disposition: str = 'WRITE_APPEND'
+        write_disposition: str = "WRITE_APPEND",
     ):
         """
         Load a JSON file into a BigQuery table.
@@ -96,7 +98,7 @@ class BigQueryLoader:
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
             write_disposition=write_disposition,
             autodetect=(schema is None),
-            schema=schema
+            schema=schema,
         )
 
         # FIX V2: convert JSON array to NDJSON before loading.
@@ -105,15 +107,15 @@ class BigQueryLoader:
         ndjson_buffer = self._json_array_to_ndjson(json_file)
 
         load_job = self.client.load_table_from_file(
-            ndjson_buffer,
-            table_id,
-            job_config=job_config
+            ndjson_buffer, table_id, job_config=job_config
         )
 
         load_job.result()  # Wait for completion
 
         table = self.client.get_table(table_id)
-        logger.info(f"✅ Loaded {load_job.output_rows} rows → {table_id} ({table.num_rows} total)")
+        logger.info(
+            f"✅ Loaded {load_job.output_rows} rows → {table_id} ({table.num_rows} total)"
+        )
 
     # FIX V2: signature changed from (self, data_dir: str = '../data/bronze/validations')
     # to     (self, data_dir: Path = None) with PROJECT_ROOT as fallback.
@@ -127,13 +129,15 @@ class BigQueryLoader:
             truncate: If True, reset table before loading (use after schema change).
                       Default False = APPEND mode for daily increments.
         """
-        data_path = Path(data_dir) if data_dir else PROJECT_ROOT / 'data/bronze/validations'
+        data_path = (
+            Path(data_dir) if data_dir else PROJECT_ROOT / "data/bronze/validations"
+        )
 
         if not data_path.exists():
             logger.warning(f"Directory not found: {data_path}")
             return
 
-        json_files = sorted(data_path.glob('validations_*.json'))
+        json_files = sorted(data_path.glob("validations_*.json"))
 
         if not json_files:
             logger.warning(f"No validation files found in {data_path}")
@@ -144,13 +148,13 @@ class BigQueryLoader:
         # --truncate: WRITE_TRUNCATE on the first file to reset schema,
         # then WRITE_APPEND for the rest to stack all files.
         for i, json_file in enumerate(json_files):
-            disposition = 'WRITE_TRUNCATE' if (truncate and i == 0) else 'WRITE_APPEND'
+            disposition = "WRITE_TRUNCATE" if (truncate and i == 0) else "WRITE_APPEND"
             if truncate and i == 0:
                 logger.info("Truncate mode: first file will reset the table schema")
             self.load_json_to_table(
                 json_file=json_file,
-                table_name='raw_validations',
-                write_disposition=disposition
+                table_name="raw_validations",
+                write_disposition=disposition,
             )
 
     # FIX V2: same path fix as load_validations — '../data/bronze/punctuality' → PROJECT_ROOT
@@ -161,13 +165,15 @@ class BigQueryLoader:
             data_dir: Override default Bronze directory.
             truncate: If True, reset table before loading (use after schema change).
         """
-        data_path = Path(data_dir) if data_dir else PROJECT_ROOT / 'data/bronze/punctuality'
+        data_path = (
+            Path(data_dir) if data_dir else PROJECT_ROOT / "data/bronze/punctuality"
+        )
 
         if not data_path.exists():
             logger.warning(f"Directory not found: {data_path}")
             return
 
-        json_files = sorted(data_path.glob('punctuality_*.json'))
+        json_files = sorted(data_path.glob("punctuality_*.json"))
 
         if not json_files:
             logger.warning(f"No punctuality files found in {data_path}")
@@ -176,11 +182,11 @@ class BigQueryLoader:
         logger.info(f"Found {len(json_files)} punctuality file(s)")
 
         for i, json_file in enumerate(json_files):
-            disposition = 'WRITE_TRUNCATE' if (truncate and i == 0) else 'WRITE_APPEND'
+            disposition = "WRITE_TRUNCATE" if (truncate and i == 0) else "WRITE_APPEND"
             self.load_json_to_table(
                 json_file=json_file,
-                table_name='raw_punctuality',
-                write_disposition=disposition
+                table_name="raw_punctuality",
+                write_disposition=disposition,
             )
 
     # FIX V2: same path fix as load_validations — '../data/bronze/referentials' → PROJECT_ROOT
@@ -191,7 +197,9 @@ class BigQueryLoader:
         Always uses WRITE_TRUNCATE since referentials are complete snapshots,
         not incremental data.
         """
-        data_path = Path(data_dir) if data_dir else PROJECT_ROOT / 'data/bronze/referentials'
+        data_path = (
+            Path(data_dir) if data_dir else PROJECT_ROOT / "data/bronze/referentials"
+        )
 
         if not data_path.exists():
             logger.warning(f"Directory not found: {data_path}")
@@ -199,13 +207,13 @@ class BigQueryLoader:
 
         # Map filename prefix → target table
         ref_tables = {
-            'ref_stops': 'raw_ref_stops',
-            'ref_lines': 'raw_ref_lines',
-            'ref_stop_lines': 'raw_ref_stop_lines'
+            "ref_stops": "raw_ref_stops",
+            "ref_lines": "raw_ref_lines",
+            "ref_stop_lines": "raw_ref_stop_lines",
         }
 
         for pattern, table_name in ref_tables.items():
-            json_files = sorted(data_path.glob(f'{pattern}_*.json'))
+            json_files = sorted(data_path.glob(f"{pattern}_*.json"))
 
             if not json_files:
                 logger.warning(f"No {pattern} files found in {data_path}")
@@ -218,7 +226,7 @@ class BigQueryLoader:
             self.load_json_to_table(
                 json_file=latest_file,
                 table_name=table_name,
-                write_disposition='WRITE_TRUNCATE'
+                write_disposition="WRITE_TRUNCATE",
             )
 
     def load_all(self, truncate: bool = False):
@@ -241,15 +249,26 @@ class BigQueryLoader:
 # FIX V2: added CLI argument parser — V1 had no arguments, always ran load_all().
 # Now you can target a specific dataset without reloading everything.
 def main():
-    parser = argparse.ArgumentParser(description='Load Bronze JSON files into BigQuery RAW tables')
-    parser.add_argument('--validations', action='store_true', help='Load validations only')
-    parser.add_argument('--punctuality', action='store_true', help='Load punctuality only')
-    parser.add_argument('--referentials', action='store_true', help='Load referentials only')
+    parser = argparse.ArgumentParser(
+        description="Load Bronze JSON files into BigQuery RAW tables"
+    )
+    parser.add_argument(
+        "--validations", action="store_true", help="Load validations only"
+    )
+    parser.add_argument(
+        "--punctuality", action="store_true", help="Load punctuality only"
+    )
+    parser.add_argument(
+        "--referentials", action="store_true", help="Load referentials only"
+    )
     # --truncate: use when schema has changed and existing RAW table must be reset.
     # Safe on RAW/Bronze — data is always reproducible from source API.
     # Never use on staging/core/marts without a proper SQL migration.
-    parser.add_argument('--truncate', action='store_true',
-                        help='Reset tables before loading (use after schema change)')
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="Reset tables before loading (use after schema change)",
+    )
 
     args = parser.parse_args()
     loader = BigQueryLoader()
@@ -264,5 +283,5 @@ def main():
         loader.load_all(truncate=args.truncate)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
