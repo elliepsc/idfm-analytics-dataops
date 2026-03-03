@@ -93,6 +93,9 @@ google-cloud-sdk/
 
 warehouse/dbt/dbt_packages/
 warehouse/dbt/dbt_internal_packages/
+warehouse/dbt/dbt_packages_data/
+warehouse/dbt/dbt_internal_packages_data/
+
 
 
 

@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 class BigQueryLoader:

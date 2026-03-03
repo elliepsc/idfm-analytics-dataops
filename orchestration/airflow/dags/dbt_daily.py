@@ -10,6 +10,7 @@ Use case: When you want to re-run transformations without re-extracting data
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 from datetime import datetime, timedelta
 
@@ -41,124 +42,143 @@ with DAG(
     tags=['dbt', 'transform', 'daily'],
     max_active_runs=1,
 ) as dag:
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 1: Install dbt dependencies
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_deps = BashOperator(
         task_id='dbt_deps',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt deps --profiles-dir . --profile transport
+            /home/airflow/.local/bin/dbt deps --profiles-dir . --profile transport
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 2: Run staging models
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_run_staging = BashOperator(
         task_id='dbt_run_staging',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt run --target prod --select staging
+            /home/airflow/.local/bin/dbt run --target prod --select staging
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 3: Run core models (dimensions + facts)
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_run_core = BashOperator(
         task_id='dbt_run_core',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt run --target prod --select core
+            /home/airflow/.local/bin/dbt run --target prod --select core
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 4: Run marts models (analytics)
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_run_marts = BashOperator(
         task_id='dbt_run_marts',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt run --target prod --select marts
+            /home/airflow/.local/bin/dbt run --target prod --select marts
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 5: Run all tests
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_test = BashOperator(
         task_id='dbt_test',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt test --target prod
+            /home/airflow/.local/bin/dbt test --target prod
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 6: Generate documentation
     # ─────────────────────────────────────────────────────────────
-    
+
     dbt_docs_generate = BashOperator(
         task_id='dbt_docs_generate',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt docs generate --target prod
+            /home/airflow/.local/bin/dbt docs generate --target prod
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # TASK 7: Success notification
     # ─────────────────────────────────────────────────────────────
-    
-    notify_success = SlackWebhookOperator(
-        task_id='notify_success',
-        slack_webhook_conn_id='slack_webhook',
-        message="""
-✅ *dbt Daily Build - SUCCESS*
 
-📅 Date: {{ ds }}
-⏱️ Duration: {{ task_instance.duration }}s
-🎯 All models and tests passed
-        """,
-        channel='#data-alerts',
+    def notify_success_fn(**context):
+        try:
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text="dbt Daily SUCCESS")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Slack skipped: {e}")
+        print("dbt daily completed successfully")
+
+    notify_success = PythonOperator(
+        task_id="notify_success",
+        python_callable=notify_success_fn,
     )
-    
+
     # ─────────────────────────────────────────────────────────────
     # Task Dependencies
     # ─────────────────────────────────────────────────────────────
-    
+
     # Sequential execution through layers
     dbt_deps >> dbt_run_staging >> dbt_run_core >> dbt_run_marts >> dbt_test >> dbt_docs_generate >> notify_success
 
@@ -170,9 +190,9 @@ with DAG(
 def task_failure_alert(context):
     """Send alert on task failure"""
     from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-    
+
     slack_hook = SlackWebhookHook(slack_webhook_conn_id='slack_webhook')
-    
+
     message = f"""
 ❌ *dbt Daily Build - FAILED*
 
@@ -181,7 +201,7 @@ def task_failure_alert(context):
 ⚠️ Error: {context['exception']}
 🔗 Log: {context['task_instance'].log_url}
     """
-    
+
     slack_hook.send(text=message, channel='#data-alerts')
 
 

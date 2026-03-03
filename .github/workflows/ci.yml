@@ -45,22 +45,25 @@ jobs:
         run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: actions/codecov-action@v3
         with:
           files: ./coverage.xml
           flags: unittests
 
       - name: Install dbt
-        run: |
-          pip install dbt-core dbt-bigquery
+        run: pip install dbt-core dbt-bigquery
 
       - name: dbt deps
         run: cd warehouse/dbt && dbt deps
 
-      - name: dbt parse (no BigQuery connection needed)
+      - name: dbt parse
+        # FIX V2: dbt requires a file named exactly 'profiles.yml' in --profiles-dir.
+        # profile_ci.yml exists for clarity but must be exposed as profiles.yml at runtime.
+        # Uses oauth with dummy project — no real GCP credentials needed for parse.
         run: |
           cd warehouse/dbt
-          dbt parse --profiles-dir . --profile transport_ci --target ci
+          cp profile_ci.yml /tmp/profiles.yml
+          dbt parse --profiles-dir /tmp --profile transport_ci --target ci
 
       - name: Summary
         if: always()

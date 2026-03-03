@@ -12,11 +12,10 @@ transport:
 
     prod:
       type: bigquery
-      method: service-account
+      method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}"
-      location: EU
+      location: europe-west1
       threads: 8
       timeout_seconds: 600
       priority: interactive
-      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"

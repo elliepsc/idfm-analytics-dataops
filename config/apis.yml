@@ -1,6 +1,5 @@
 idfm:
   base_url: "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
-
   datasets:
     # -------------------------------------------------------------------------
     # VALIDATIONS RÉSEAU FERRÉ
@@ -22,11 +21,11 @@ idfm:
         validation_count: "nb_vald"       # Nombre de validations (int)
       filters:
         date_field: "jour"
-
     # -------------------------------------------------------------------------
     # RÉFÉRENTIEL ARRÊTS
     # Dataset dénormalisé : 1 stop peut avoir N lignes → doublons normaux
     # Vérifié V1 : 73,840 records bruts → 8,526 stops uniques
+    # ⚠️  API paginée à 10,000 records max — stops extraits = 10,000/73,264
     # -------------------------------------------------------------------------
     ref_stops:
       id: "arrets-lignes"
@@ -36,7 +35,6 @@ idfm:
         latitude: "stop_lat"
         longitude: "stop_lon"
         town: "nom_commune"
-
     # -------------------------------------------------------------------------
     # RÉFÉRENTIEL LIGNES
     # -------------------------------------------------------------------------
@@ -47,19 +45,21 @@ idfm:
         line_name: "name_line"
         transport_mode: "transportmode"
         operator: "operatorname"
-
     # -------------------------------------------------------------------------
-    # RÉFÉRENTIEL ARRÊTS-LIGNES (jointure)
+    # RÉFÉRENTIEL ARRÊTS-LIGNES (jointure) — DÉSACTIVÉ V2
+    # ⚠️  arrets-lignes ne contient pas de champ line_id exploitable.
+    # ⚠️  Dataset plafonné à 10,000 records sur 73,264 disponibles.
+    # TODO V4 : implémenter via GTFS IDFM (stops.txt + routes.txt + stop_times.txt)
+    #           https://data.iledefrance-mobilites.fr/explore/dataset/offre-horaires-tc-gtfs-idfm
     # -------------------------------------------------------------------------
-    ref_stop_lines:
-      id: "arrets-lignes"
-      fields:
-        stop_id: "stop_id"
-        line_id: "line_id"
+    # ref_stop_lines:
+    #   id: "arrets-lignes"
+    #   fields:
+    #     stop_id: "stop_id"
+    #     line_id: "line_id"
 
 transilien:
   base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
-
   datasets:
     # -------------------------------------------------------------------------
     # PONCTUALITÉ MENSUELLE TRANSILIEN

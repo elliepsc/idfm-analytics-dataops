@@ -20,7 +20,7 @@ def check_sla():
     Retourne exit code 1 si breach détecté, 0 sinon
     """
     project_id = os.getenv('GCP_PROJECT_ID')
-    dataset = os.getenv('BQ_DATASET_ANALYTICS', 'transport_analytics')
+    dataset = os.getenv('BQ_DATASET_ANALYTICS', 'transport_staging_analytics')
     table = f"{project_id}.{dataset}.fct_data_health_daily"
 
     client = bigquery.Client(project=project_id)
@@ -33,8 +33,6 @@ def check_sla():
       freshness_hours,
       sla_hours,
       row_count,
-      null_percentage,
-      duplicate_count,
       sla_met
     FROM `{table}`
     WHERE metric_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)
@@ -61,8 +59,6 @@ def check_sla():
             logger.error(f"Date: {row.metric_date}")
             logger.error(f"Freshness: {row.freshness_hours}h (SLA: {row.sla_hours}h)")
             logger.error(f"Row count: {row.row_count}")
-            logger.error(f"Null %: {row.null_percentage:.2f}%")
-            logger.error(f"Duplicates: {row.duplicate_count}")
 
         return 1
 
