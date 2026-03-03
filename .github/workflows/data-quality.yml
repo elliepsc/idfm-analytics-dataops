@@ -10,7 +10,7 @@ jobs:
   data-quality-checks:
     runs-on: ubuntu-latest
 
-    if: ${{ secrets.GCP_SA_KEY != '' }}
+    if: ${{ secrets.GCP_SA_KEY != null }}
 
     steps:
       - name: Checkout code
