@@ -45,7 +45,7 @@ jobs:
         run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
 
       - name: Upload coverage
-        uses: actions/codecov-action@v3
+        uses: actions/codecov-action@v4
         with:
           files: ./coverage.xml
           flags: unittests
