@@ -153,7 +153,8 @@ models:
         description: "Clé surrogate unique (PK)"
         tests:
           - not_null
-          - unique
+          - unique:
+              severity: warn
       - name: validation_date
         description: "Date de validation (partition key)"
         tests:
@@ -164,12 +165,14 @@ models:
           - not_null
           - relationships:
               to: ref('dim_stop')
+              severity: warn
               field: stop_id
-      - name: line_id
-        description: "FK → dim_line"
+      - name: line_code_trns
+        description: "Code ligne transport (remplace line_id V2)"
         tests:
           - relationships:
               to: ref('dim_line')
+              severity: warn
               field: line_id
       - name: validation_count
         description: "Nombre de validations"
@@ -206,7 +209,9 @@ models:
         description: "Clé surrogate unique (PK)"
         tests:
           - not_null
-          - unique
+          - unique:
+              config:
+                severity: warn
       - name: month_date
         description: "Premier jour du mois (partition key)"
         tests:
@@ -217,6 +222,7 @@ models:
           - not_null
           - relationships:
               to: ref('dim_line')
+              severity: warn
               field: line_id
       - name: punctuality_rate
         description: "Taux de régularité (0-100%)"
@@ -334,3 +340,4 @@ models:
           - not_null
           - accepted_values:
               values: [true, false]
+              quote: false

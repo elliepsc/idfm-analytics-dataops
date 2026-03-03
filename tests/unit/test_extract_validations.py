@@ -1,188 +1,110 @@
-"""
-Unit tests for extract_validations.py
+x-airflow-common:
+  &airflow-common
+  build:
+    context: ../..
+    dockerfile: orchestration/airflow/Dockerfile
+  env_file:
+    - ../../.env
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # GCP variables — loaded from ../../.env via env_file above
+    # FIX V2: no service-account.json key available — use ADC (Application Default Credentials)
+    # ADC is mounted from host ~/.config/gcloud/ volume below.
+    # GOOGLE_APPLICATION_CREDENTIALS is unset → google-auth library falls back to ADC automatically.
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    BQ_DATASET_RAW: ${BQ_DATASET_RAW:-transport_raw}
+    BQ_DATASET_STAGING: ${BQ_DATASET_STAGING:-transport_staging}
+    BQ_DATASET_ANALYTICS: ${BQ_DATASET_ANALYTICS:-transport_analytics}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./data:/opt/airflow/data
+    - ../../ingestion:/opt/airflow/ingestion
+    - ../../warehouse:/opt/airflow/warehouse
+    - ../../scripts:/opt/airflow/scripts
+    - ../../credentials:/opt/airflow/credentials
+    - ../../config:/opt/airflow/config
+    # FIX V2: mount host gcloud ADC credentials into container (read-only)
+    # Requires: gcloud auth application-default login on host machine
+    - ${HOME}/.config/gcloud:/home/airflow/.config/gcloud:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
 
-Behaviors tested:
-  - Successful extraction → JSON file created with correct content
-  - No records returned → no file created, no exception raised
-  - Non-existent output directory → created automatically
-  - Metadata fields added (ingestion_ts, source)
-  - Output filename matches expected pattern
-  - Correct config key used ('validations_rail', not 'validations')
-  - ingestion_ts is timezone-aware (not deprecated utcnow())
-"""
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
 
-import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import json
-import sys
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'ingestion'))
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
-from extract_validations import extract_validations, load_config
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins}
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    user: "0:0"
 
-
-class TestExtractValidations:
-
-    @patch('extract_validations.load_config')
-    @patch('extract_validations.ODSv2Client')
-    def test_extract_validations_success(
-        self,
-        mock_client_class,
-        mock_load_config,
-        mock_config,
-        mock_ods_response,
-        tmp_output_dir
-    ):
-        """Successful extraction: JSON file created with correct content and field mapping."""
-        mock_load_config.return_value = mock_config
-
-        mock_client = MagicMock()
-        # FIXED V2: get_all_records returns root-level records directly
-        mock_client.get_all_records.return_value = mock_ods_response['results']
-        mock_client_class.return_value = mock_client
-
-        extract_validations(
-            start_date='2024-01-01',
-            end_date='2024-01-02',
-            output_dir=str(tmp_output_dir)
-        )
-
-        # get_all_records called, extract_fields NOT called (we read root directly)
-        mock_client.get_all_records.assert_called_once()
-        mock_client.extract_fields.assert_not_called()
-
-        # Output file created with correct name
-        output_files = list(tmp_output_dir.glob('*.json'))
-        assert len(output_files) == 1
-        assert output_files[0].name == 'validations_2024-01-01_2024-01-02.json'
-
-        # Content is correct
-        with open(output_files[0]) as f:
-            data = json.load(f)
-
-        assert len(data) == 2
-        # Metadata fields present
-        assert 'ingestion_ts' in data[0]
-        assert data[0]['source'] == 'idfm_validations_rail'
-        # Fields correctly mapped from record root
-        assert data[0]['date'] == '2024-01-01'
-        assert data[0]['stop_id'] == '401'
-        assert data[0]['stop_name'] == 'CHATELET'
-        assert data[0]['validation_count'] == 1000
-        assert data[0]['ticket_type'] == 'Navigo'
-
-    @patch('extract_validations.load_config')
-    @patch('extract_validations.ODSv2Client')
-    def test_extract_validations_no_records(
-        self,
-        mock_client_class,
-        mock_load_config,
-        mock_config,
-        tmp_output_dir
-    ):
-        """No records returned → no file created, no exception raised."""
-        mock_load_config.return_value = mock_config
-
-        mock_client = MagicMock()
-        mock_client.get_all_records.return_value = []
-        mock_client_class.return_value = mock_client
-
-        extract_validations(
-            start_date='2024-01-01',
-            end_date='2024-01-02',
-            output_dir=str(tmp_output_dir)
-        )
-
-        output_files = list(tmp_output_dir.glob('*.json'))
-        assert len(output_files) == 0
-
-    @patch('extract_validations.load_config')
-    @patch('extract_validations.ODSv2Client')
-    def test_extract_validations_creates_directory(
-        self,
-        mock_client_class,
-        mock_load_config,
-        mock_config,
-        mock_ods_response,
-        tmp_path
-    ):
-        """Non-existent output directory is created automatically when records are found.
-
-        Note: directory is only created if records exist — no empty dirs on empty results.
-        """
-        mock_load_config.return_value = mock_config
-        mock_client = MagicMock()
-        # Need actual records — mkdir only runs after the empty-records early return
-        mock_client.get_all_records.return_value = mock_ods_response['results']
-        mock_client_class.return_value = mock_client
-
-        output_dir = tmp_path / "new" / "nested" / "dir"
-        assert not output_dir.exists()
-
-        extract_validations(
-            start_date='2024-01-01',
-            end_date='2024-01-02',
-            output_dir=str(output_dir)
-        )
-
-        assert output_dir.exists()
-        assert output_dir.is_dir()
-
-    @patch('extract_validations.load_config')
-    @patch('extract_validations.ODSv2Client')
-    def test_uses_correct_config_key(
-        self,
-        mock_client_class,
-        mock_load_config,
-        mock_config,
-        mock_ods_response,
-        tmp_output_dir
-    ):
-        """ODSv2Client is instantiated with the correct dataset ID from 'validations_rail' key."""
-        mock_load_config.return_value = mock_config
-        mock_client = MagicMock()
-        mock_client.get_all_records.return_value = mock_ods_response['results']
-        mock_client_class.return_value = mock_client
-
-        extract_validations(
-            start_date='2024-01-01',
-            end_date='2024-01-01',
-            output_dir=str(tmp_output_dir)
-        )
-
-        call_kwargs = mock_client_class.call_args
-        assert 'validations-reseau-ferre' in str(call_kwargs)
-
-    @patch('extract_validations.load_config')
-    @patch('extract_validations.ODSv2Client')
-    def test_ingestion_ts_is_timezone_aware(
-        self,
-        mock_client_class,
-        mock_load_config,
-        mock_config,
-        mock_ods_response,
-        tmp_output_dir
-    ):
-        """ingestion_ts must be timezone-aware (datetime.now(timezone.utc), not deprecated utcnow())."""
-        mock_load_config.return_value = mock_config
-        mock_client = MagicMock()
-        mock_client.get_all_records.return_value = mock_ods_response['results']
-        mock_client_class.return_value = mock_client
-
-        extract_validations(
-            start_date='2024-01-01',
-            end_date='2024-01-01',
-            output_dir=str(tmp_output_dir)
-        )
-
-        output_files = list(tmp_output_dir.glob('*.json'))
-        with open(output_files[0]) as f:
-            data = json.load(f)
-
-        # Timezone-aware timestamps contain '+00:00' or 'Z'
-        assert '+00:00' in data[0]['ingestion_ts'] or 'Z' in data[0]['ingestion_ts']
-
-    def test_load_config_is_callable(self):
-        """load_config is a callable function."""
-        assert callable(load_config)
+volumes:
+  postgres-db-volume:

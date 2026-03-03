@@ -11,25 +11,20 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
+packages-install-path: "/tmp/dbt_packages_airflow"
+
 clean-targets:
   - "target"
-  - "dbt_packages"
+  # - "dbt_packages_data"
   - "logs"
 
-# FIX V2: merged two 'models:' blocks that existed in V1.
-# YAML silently ignores the first block when two keys are identical at the same level —
-# meaning all materialization config (view, table, incremental) was overridden
-# by the disabled-models block, and only the +enabled: false settings were applied.
 models:
   transport_scorecard:
 
-    # --- Materialization config ---
-    # Staging: lightweight views, no storage cost, always fresh
     staging:
       +materialized: view
       +schema: staging
 
-    # Core: physical tables for dimensions and facts
     core:
       +materialized: table
       +schema: core
@@ -44,7 +39,6 @@ models:
           data_type: "date"
           granularity: "day"
 
-    # Marts: BI-ready tables (analytics + monitoring)
     marts:
       +materialized: table
       +schema: analytics

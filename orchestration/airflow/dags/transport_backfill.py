@@ -69,7 +69,7 @@ def extract_punctuality_backfill(**context):
     """
     import sys
     sys.path.insert(0, '/opt/airflow/ingestion')
-    from extract_punctuality import extract_punctuality
+    import extract_ponctuality as mod
     from dateutil.relativedelta import relativedelta
     import pendulum
     
@@ -91,7 +91,7 @@ def extract_punctuality_backfill(**context):
         
         print(f"  Extracting month: {current.format('YYYY-MM')}")
         
-        extract_punctuality(
+        mod.extract_punctuality(
             start_date=month_start,
             end_date=month_end,
             output_dir='/opt/airflow/data/bronze/punctuality'
@@ -111,13 +111,11 @@ def extract_referentials_backfill(**context):
     sys.path.insert(0, '/opt/airflow/ingestion')
     from extract_ref_stops import extract_ref_stops
     from extract_ref_lines import extract_ref_lines
-    from extract_ref_stop_lines import extract_ref_stop_lines
     
     print("📅 Extracting reference data (stops, lines, mappings)")
     
     extract_ref_stops(output_dir='/opt/airflow/data/bronze/referentials')
     extract_ref_lines(output_dir='/opt/airflow/data/bronze/referentials')
-    extract_ref_stop_lines(output_dir='/opt/airflow/data/bronze/referentials')
     
     print("✅ Reference data extraction complete")
 
@@ -244,12 +242,15 @@ with DAG(
         task_id='dbt_build_full_refresh',
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            dbt deps && \
-            dbt build --target prod --full-refresh
+            /home/airflow/.local/bin/dbt deps && \
+            /home/airflow/.local/bin/dbt build --target prod --full-refresh
         """,
         env={
             'DBT_PROFILES_DIR': '/opt/airflow/warehouse/dbt',
-            'GOOGLE_APPLICATION_CREDENTIALS': '{{ var.value.gcp_credentials_path }}',
+            'GCP_PROJECT_ID': 'idfm-analytics-dev-488611',
+            'BQ_DATASET_RAW': 'transport_raw',
+            'BQ_DATASET_STAGING': 'transport_staging',
+            'BQ_DATASET_ANALYTICS': 'transport_staging_analytics',
         },
     )
     
@@ -267,17 +268,18 @@ with DAG(
     # STAGE 5: Success notification
     # ─────────────────────────────────────────────────────────────
     
-    notify_success = SlackWebhookOperator(
-        task_id='notify_success',
-        slack_webhook_conn_id='slack_webhook',
-        message="""
-✅ *Transport Backfill - SUCCESS*
+    def notify_success_fn(**context):
+        try:
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text="Backfill SUCCESS")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Slack skipped: {e}")
+        print("Backfill completed successfully")
 
-📅 Date Range: {{ dag_run.conf.get('start_date') }} to {{ dag_run.conf.get('end_date') }}
-⏱️ Duration: {{ task_instance.duration }}s
-🎯 Historical data loaded and transformed
-        """,
-        channel='#data-alerts',
+    notify_success = PythonOperator(
+        task_id="notify_success",
+        python_callable=notify_success_fn,
     )
     
     # ─────────────────────────────────────────────────────────────
