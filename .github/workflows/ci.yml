@@ -61,7 +61,7 @@ jobs:
         run: |
           cd warehouse/dbt
           cp profile_ci.yml /tmp/profiles.yml
-          dbt parse --profiles-dir /tmp --profile transport_ci --target ci
+          GCP_PROJECT_ID=dummy-project dbt parse --profiles-dir /tmp --profile transport_ci --target ci
 
       - name: Summary
         if: always()
