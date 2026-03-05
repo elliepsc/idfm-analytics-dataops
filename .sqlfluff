@@ -1,8 +1,10 @@
 [sqlfluff]
 dialect = bigquery
-templater = jinja
+templater = dbt
 max_line_length = 120
-exclude_rules = LT02,LT05,LT09,LT12,RF02,ST06,AL01,AL03,CP01,LT01,LT11,TMP,PRS
 
-[sqlfluff:templater:jinja]
-apply_dbt_builtins = true
+[sqlfluff:templater:dbt]
+project_dir = warehouse/dbt
+profiles_dir = warehouse/dbt
+profile = transport_ci
+target = ci
