@@ -10,7 +10,7 @@ jobs:
   data-quality-checks:
     runs-on: ubuntu-latest
 
-    if: ${{ secrets.GCP_SA_KEY != null }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
 
     steps:
       - name: Checkout code
