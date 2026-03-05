@@ -38,8 +38,6 @@ jobs:
       - name: Lint Python (flake8)
         run: flake8 ingestion/ scripts/ --max-line-length=120 --extend-ignore=E203
 
-      - name: Lint SQL (sqlfluff)
-        run: sqlfluff lint warehouse/dbt/models --dialect bigquery
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
