@@ -50,3 +50,13 @@ models:
 vars:
   dev_start_date: '2024-01-01'
   dev_end_date: '2024-12-31'
+
+seeds:
+  transport_scorecard:
+    +schema: transport_raw
+    ticket_type_mapping:
+      +column_types:
+        ticket_type_code: string
+        ticket_type_label: string
+        category: string
+        is_navigo: boolean
