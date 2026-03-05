@@ -1,110 +1,76 @@
-x-airflow-common:
-  &airflow-common
-  build:
-    context: ../..
-    dockerfile: orchestration/airflow/Dockerfile
-  env_file:
-    - ../../.env
-  environment:
-    &airflow-common-env
-    AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # GCP variables — loaded from ../../.env via env_file above
-    # FIX V2: no service-account.json key available — use ADC (Application Default Credentials)
-    # ADC is mounted from host ~/.config/gcloud/ volume below.
-    # GOOGLE_APPLICATION_CREDENTIALS is unset → google-auth library falls back to ADC automatically.
-    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
-    BQ_DATASET_RAW: ${BQ_DATASET_RAW:-transport_raw}
-    BQ_DATASET_STAGING: ${BQ_DATASET_STAGING:-transport_staging}
-    BQ_DATASET_ANALYTICS: ${BQ_DATASET_ANALYTICS:-transport_analytics}
-  volumes:
-    - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-    - ./plugins:/opt/airflow/plugins
-    - ./data:/opt/airflow/data
-    - ../../ingestion:/opt/airflow/ingestion
-    - ../../warehouse:/opt/airflow/warehouse
-    - ../../scripts:/opt/airflow/scripts
-    - ../../credentials:/opt/airflow/credentials
-    - ../../config:/opt/airflow/config
-    # FIX V2: mount host gcloud ADC credentials into container (read-only)
-    # Requires: gcloud auth application-default login on host machine
-    - ${HOME}/.config/gcloud:/home/airflow/.config/gcloud:ro
-  user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    &airflow-common-depends-on
-    postgres:
-      condition: service_healthy
+"""
+Unit tests for extract_validations.py
+"""
 
-services:
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    volumes:
-      - postgres-db-volume:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
-      interval: 10s
-      retries: 5
-      start_period: 5s
-    restart: always
+import json
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-  airflow-webserver:
-    <<: *airflow-common
-    command: webserver
-    ports:
-      - "8081:8080"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
+import pytest
 
-  airflow-scheduler:
-    <<: *airflow-common
-    command: scheduler
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "ingestion"))
 
-  airflow-init:
-    <<: *airflow-common
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
-        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins}
-        exec /entrypoint airflow version
-    environment:
-      <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-    user: "0:0"
+from extract_validations import extract_validations, load_config
 
-volumes:
-  postgres-db-volume:
+
+class TestExtractValidations:
+
+    @patch("extract_validations.load_config")
+    @patch("extract_validations.ODSv2Client")
+    def test_extract_validations_success(
+        self,
+        mock_client_class,
+        mock_load_config,
+        mock_config,
+        mock_ods_response,
+        tmp_output_dir,
+    ):
+        """Successful extraction: JSON file created with correct content."""
+        mock_load_config.return_value = mock_config
+        mock_client = MagicMock()
+        mock_client.get_all_records.return_value = mock_ods_response["results"]
+        mock_client_class.return_value = mock_client
+
+        extract_validations(
+            start_date="2024-01-01",
+            end_date="2024-01-31",
+            output_dir=str(tmp_output_dir),
+        )
+
+        output_files = list(tmp_output_dir.glob("*.json"))
+        assert len(output_files) == 1
+
+        with open(output_files[0]) as f:
+            data = json.load(f)
+
+        assert len(data) == 2
+        assert "ingestion_ts" in data[0]
+        assert data[0]["source"] == "idfm_validations_rail"
+
+    @patch("extract_validations.load_config")
+    @patch("extract_validations.ODSv2Client")
+    def test_extract_validations_no_records(
+        self,
+        mock_client_class,
+        mock_load_config,
+        mock_config,
+        tmp_output_dir,
+    ):
+        """No records returned → no file created."""
+        mock_load_config.return_value = mock_config
+        mock_client = MagicMock()
+        mock_client.get_all_records.return_value = []
+        mock_client_class.return_value = mock_client
+
+        extract_validations(
+            start_date="2024-01-01",
+            end_date="2024-01-31",
+            output_dir=str(tmp_output_dir),
+        )
+
+        assert len(list(tmp_output_dir.glob("*.json"))) == 0
+
+    def test_load_config_is_callable(self):
+        """load_config is a callable function."""
+        assert callable(load_config)
