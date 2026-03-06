@@ -7,13 +7,14 @@ import logging
 import sys
 from pathlib import Path
 
-import great_expectations as gx
 from great_expectations.expectations import (
     ExpectColumnToExist,
     ExpectColumnValuesToBeBetween,
     ExpectColumnValuesToMatchRegex,
     ExpectColumnValuesToNotBeNull,
 )
+
+import great_expectations as gx
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
