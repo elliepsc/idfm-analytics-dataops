@@ -159,6 +159,8 @@ models:
         description: "Date de validation (partition key)"
         tests:
           - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
       - name: stop_id
         description: "FK → dim_stop"
         tests:
@@ -181,6 +183,7 @@ models:
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
+          - assert_positive_values
       - name: ingestion_ts
         description: "Timestamp d'ingestion (pour freshness monitoring)"
         tests:
