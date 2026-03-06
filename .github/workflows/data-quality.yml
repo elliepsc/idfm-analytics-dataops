@@ -9,6 +9,8 @@
 name: Data Quality
 
 on:
+  schedule:
+    - cron: '0 6 * * 1-5'  # Weekdays 6am UTC
   push:
     branches: [main, develop]
     paths:
