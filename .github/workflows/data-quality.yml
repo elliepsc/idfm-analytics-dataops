@@ -1,0 +1,105 @@
+# Data Quality CI - Version locale (sans credentials GCP)
+# ═══════════════════════════════════════════════════════════════
+# V4 TODO: Activer les étapes GCP avec Workload Identity Federation
+# - Décommenter les sections marquées [V4-GCP]
+# - Configurer WIF sur GCP Console
+# - Ajouter secrets: GCP_PROJECT_ID, WIF_PROVIDER, WIF_SERVICE_ACCOUNT
+# ═══════════════════════════════════════════════════════════════
+
+name: Data Quality
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'warehouse/dbt/**'
+      - 'scripts/**'
+      - 'tests/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  dbt-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: pip install dbt-core dbt-bigquery
+
+      - name: dbt deps
+        run: |
+          cd warehouse/dbt
+          cp profile_ci.yml /tmp/profiles.yml
+          dbt deps --profiles-dir /tmp --profile transport_ci --target ci
+
+      - name: dbt parse
+        run: |
+          cd warehouse/dbt
+          GCP_PROJECT_ID=dummy-project dbt parse --profiles-dir /tmp --profile transport_ci --target ci
+
+      - name: dbt compile
+        run: |
+          cd warehouse/dbt
+          GCP_PROJECT_ID=dummy-project dbt compile --profiles-dir /tmp --profile transport_ci --target ci
+        continue-on-error: true
+
+      # [V4-GCP] Décommenter pour activer les tests dbt réels sur BigQuery
+      # - name: Authenticate to GCP (WIF)
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+      #     service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      #
+      # - name: dbt build monitoring models
+      #   run: |
+      #     cd warehouse/dbt
+      #     GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+      #     dbt build --target prod --select marts.monitoring
+
+  data-quality-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
+
+      - name: Check SLA script syntax
+        run: python3 -m py_compile scripts/check_sla.py && echo "✅ SLA script OK"
+
+      # [V4-GCP] Décommenter pour valider contre BigQuery réel
+      # - name: Check SLA compliance
+      #   run: python scripts/check_sla.py
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Security scan
+        run: bandit -r ingestion/ scripts/ -ll --exit-zero
