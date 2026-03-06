@@ -99,3 +99,5 @@ warehouse/dbt/dbt_internal_packages_data/
 
 
 
+great_expectations/gx/uncommitted/
+data/raw/*.json
