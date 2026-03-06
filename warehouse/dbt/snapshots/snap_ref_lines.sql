@@ -1,5 +1,4 @@
 {% snapshot snap_ref_lines %}
-
 {{
     config(
         target_schema='transport_snapshots',
@@ -8,13 +7,10 @@
         check_cols=['line_name', 'transport_mode', 'operator'],
     )
 }}
-
 SELECT
     line_id,
     line_name,
     transport_mode,
-    operator,
-    is_active
+    operator
 FROM {{ ref('dim_line') }}
-
 {% endsnapshot %}
