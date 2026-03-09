@@ -25,7 +25,7 @@ WITH validations AS (
 )
 
 SELECT
-  {{ dbt_utils.generate_surrogate_key(['stop_id', 'validation_date', 'ticket_type']) }} AS validation_key,
+  {{ dbt_utils.generate_surrogate_key(['stop_id', 'validation_date', 'ticket_type', 'line_code_trns']) }} AS validation_key,
 
   validation_date,
   validation_month,
