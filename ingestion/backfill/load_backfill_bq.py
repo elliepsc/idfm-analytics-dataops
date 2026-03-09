@@ -219,6 +219,7 @@ def load_to_bigquery(
 if __name__ == "__main__":
     # Quick test: dry run with a small sample
     import argparse
+
     from parse_csv_historical import parse_file
 
     parser = argparse.ArgumentParser(
