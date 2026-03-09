@@ -55,3 +55,7 @@ cleaned AS (
 )
 
 SELECT * FROM cleaned
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY validation_date, stop_id, ticket_type, line_code_trns
+  ORDER BY ingestion_ts DESC
+) = 1
