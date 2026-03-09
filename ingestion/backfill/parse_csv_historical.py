@@ -335,4 +335,4 @@ if __name__ == "__main__":
             f"\n⚠️  {dupes} duplicates found on key (jour, code_stif_arret, categorie_titre)"
         )
     else:
-        print(f"\n✅ No duplicates on deduplication key")
+        print("\n✅ No duplicates on deduplication key")

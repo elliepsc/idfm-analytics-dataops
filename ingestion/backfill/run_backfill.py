@@ -32,8 +32,8 @@ import yaml
 
 # Import sibling modules
 sys.path.insert(0, str(Path(__file__).parent))
-from load_backfill_bq import load_to_bigquery
-from parse_csv_historical import parse_file
+from load_backfill_bq import load_to_bigquery  # noqa: E402
+from parse_csv_historical import parse_file  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
