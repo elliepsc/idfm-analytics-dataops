@@ -3,7 +3,6 @@ sources:
     description: "RAW tables from ingestion layer"
     database: "{{ env_var('GCP_PROJECT_ID') }}"
     schema: "{{ env_var('BQ_DATASET_RAW', 'transport_raw') }}"
-
     tables:
       - name: raw_validations
         description: "Rail network ticket validations (daily)"
@@ -18,7 +17,6 @@ sources:
             description: "Number of validations"
             data_tests:
               - not_null
-
       - name: raw_punctuality
         description: "Transilien punctuality (monthly)"
         columns:
@@ -30,7 +28,6 @@ sources:
             description: "Line identifier"
           - name: punctuality_rate
             description: "Punctuality rate (%)"
-
       - name: raw_ref_stops
         description: "Stop referential — denormalized (1 stop × N lines = expected duplicates)"
         columns:
@@ -41,17 +38,35 @@ sources:
               # FIX V2: removed 'unique' test — raw_ref_stops is denormalized:
               # one stop appears once per line it serves, so duplicates are expected and normal.
               # Uniqueness is enforced at the dim_stop level via ROW_NUMBER() deduplication.
-
       - name: raw_ref_lines
-        description: "Line referential"
+        description: "Line referential — full snapshot, replaced on each load (WRITE_TRUNCATE)"
         columns:
           - name: line_id
             description: "Line identifier"
             data_tests:
               - unique
-              # FIX V2: removed 'not_null' test — raw_ref_lines contains 2131 rows where
-              # line_id is NULL (rows with no line assignment in the source API).
+              # OPTION B — dbt uniqueness guard for raw_ref_lines.
+              # This test acts as the automated safety net against double-loads:
+              # if load_referentials() is accidentally called twice in the same DAG run,
+              # or if Airflow retries produce duplicate inserts, this test will catch it.
+              #
+              # How it works:
+              #   - raw_ref_lines uses WRITE_TRUNCATE, so each load should produce
+              #     exactly one row per line_id.
+              #   - If duplicates exist, COUNT(*) > COUNT(DISTINCT line_id), and this
+              #     unique test will return failing rows.
+              #   - The test is configured to FAIL (not warn) so that dbt_daily DAG
+              #     stops immediately — preventing corrupt data from flowing downstream
+              #     into dim_line and mart_network_scorecard_monthly.
+              #
+              # Paired with Option A in load_bigquery_raw.py which raises a ValueError
+              # at load time if table.num_rows != job.output_rows after WRITE_TRUNCATE.
+              # Together they provide defense-in-depth:
+              #   - Option A catches the problem at ingestion time (fast feedback).
+              #   - Option B catches it at transformation time (dbt test gate).
+              #
+              # FIX V2: removed 'not_null' test — raw_ref_lines contains rows where
+              # line_id is NULL (lines with no assignment in the source API).
               # NULL filtering is handled in stg_ref_lines model.
-
       - name: raw_ref_stop_lines
         description: "Stop to line mapping"

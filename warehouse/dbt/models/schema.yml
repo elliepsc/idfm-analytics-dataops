@@ -134,9 +134,9 @@ models:
 
       **Clé primaire**: validation_key (surrogate)
 
-      **Clés étrangères**:
-      - stop_id → dim_stop
-      - line_id → dim_line
+      **Identifiants disponibles**:
+      - stop_id: code STIF numerique (pas de FK directe vers dim_stop — systemes differents)
+      - line_code_trns: code operateur (100=RATP, 800=SNCF — pas de FK vers dim_line)
       - ticket_type → dim_ticket_type
 
       **Partitionnement**: Par validation_date (DAY)
@@ -162,20 +162,23 @@ models:
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: stop_id
-        description: "FK → dim_stop"
+        description: >
+          Stop identifier using the STIF numeric code (e.g. '1', '10') from
+          historical CSV files.
+          NOTE: relationship test to dim_stop intentionally removed.
+          dim_stop.stop_id uses the IDFM API format (e.g. 'IDFM:11639'), a different
+          identifier system for the same physical stops. A direct join requires a
+          mapping table — tracked as V3 improvement (stop_id reconciliation).
         tests:
           - not_null
-          - relationships:
-              to: ref('dim_stop')
-              severity: warn
-              field: stop_id
       - name: line_code_trns
-        description: "Code ligne transport (remplace line_id V2)"
-        tests:
-          - relationships:
-              to: ref('dim_line')
-              severity: warn
-              field: line_id
+        description: >
+          Transport network operator code (e.g. 100=RATP, 800=SNCF Transilien).
+          NOTE: relationship test to dim_line intentionally removed.
+          dim_line.line_id uses the IDFM line identifier format (e.g. 'C01836'),
+          a completely different concept from the operator code. Cannot be joined
+          to dim_line without an intermediate mapping table — tracked as V3
+          improvement (operator code to line_id mapping).
       - name: validation_count
         description: "Nombre de validations"
         tests:

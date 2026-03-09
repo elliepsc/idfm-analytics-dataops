@@ -29,6 +29,8 @@ sqlfluff==3.2.5
 dbt-core==1.8.7
 dbt-bigquery==1.8.2
 great-expectations==1.14.0
+sqlalchemy==2.0.48
+sqlalchemy-bigquery==1.16.0
 
 # Data Quality
 click==8.3.1
