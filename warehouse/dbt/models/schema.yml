@@ -1,17 +1,56 @@
 # Tests et documentation des modèles dbt
+# V3 — enrichi : ~75 tests (vs 56 en V2)
 models:
   # ─────────────────────────────────────────────────────────────
   # STAGING
   # ─────────────────────────────────────────────────────────────
   - name: stg_validations_rail_daily
-    description: "Validations réseau ferré - données staging nettoyées"
+    description: "Validations réseau ferré - données staging nettoyées et dédupliquées"
     columns:
       - name: validation_date
         description: "Date de validation"
         tests:
           - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
+      - name: validation_month
+        description: "Mois de validation (DATE_TRUNC MONTH)"
+        tests:
+          - not_null
+      - name: year
+        description: "Année de validation"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2020
+              max_value: 2030
+              inclusive: true
+      - name: month
+        description: "Mois (1-12)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 12
+              inclusive: true
+      - name: day_of_week
+        description: "Jour de la semaine (1=Dimanche, 7=Samedi en BigQuery)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 7
+              inclusive: true
       - name: stop_id
-        description: "Identifiant arrêt"
+        description: "Identifiant arrêt (code STIF numérique)"
+        tests:
+          - not_null
+      - name: line_code_trns
+        description: "Code opérateur transport (100=RATP, 800=SNCF)"
+        tests:
+          - not_null
+      - name: ticket_type
+        description: "Catégorie de titre (normalisée UPPER)"
         tests:
           - not_null
       - name: validation_count
@@ -21,6 +60,10 @@ models:
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
+      - name: ingestion_ts
+        description: "Timestamp d'ingestion"
+        tests:
+          - not_null
 
   - name: stg_punctuality_monthly
     description: "Ponctualité Transilien - données staging nettoyées"
@@ -29,6 +72,8 @@ models:
         description: "Premier jour du mois"
         tests:
           - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
       - name: line_id
         description: "Identifiant ligne"
         tests:
@@ -58,7 +103,7 @@ models:
       **Usage**: Jointure avec fct_validations_daily
     columns:
       - name: stop_id
-        description: "Identifiant unique de l'arrêt (PK)"
+        description: "Identifiant unique de l'arrêt (PK) — format IDFM:xxxxx"
         tests:
           - not_null
           - unique
@@ -67,14 +112,14 @@ models:
         tests:
           - not_null
       - name: latitude
-        description: "Latitude WGS84"
+        description: "Latitude WGS84 (Île-de-France : 48.0–49.5)"
         tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 48.0
               max_value: 49.5
       - name: longitude
-        description: "Longitude WGS84"
+        description: "Longitude WGS84 (Île-de-France : 1.5–3.5)"
         tests:
           - not_null
           - dbt_utils.accepted_range:
@@ -92,7 +137,7 @@ models:
       **Refresh**: Quotidien (TRUNCATE + reload)
     columns:
       - name: line_id
-        description: "Identifiant unique de la ligne (PK)"
+        description: "Identifiant unique de la ligne (PK) — format IDFM Cxxxxx"
         tests:
           - not_null
           - unique
@@ -102,8 +147,16 @@ models:
           - not_null
       - name: transport_mode
         description: "Mode de transport (RER, METRO, TRAIN, etc.)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR']
+              # values: ['100', '800', '760', '762', '810', '820', '830', '840', '850', '860', '870', '880', '890']
+              severity: warn
       - name: operator
         description: "Exploitant (RATP, SNCF, etc.)"
+        tests:
+          - not_null
 
   - name: dim_ticket_type
     description: |
@@ -130,27 +183,30 @@ models:
     description: |
       **Fait des validations quotidiennes**
 
-      **Grain**: 1 arrêt × 1 jour × 1 type de titre
+      **Grain**: 1 arrêt × 1 jour × 1 type de titre × 1 opérateur
 
-      **Clé primaire**: validation_key (surrogate)
+      **Clé primaire**: validation_key (surrogate sur stop_id + validation_date + ticket_type + line_code_trns)
 
       **Identifiants disponibles**:
-      - stop_id: code STIF numerique (pas de FK directe vers dim_stop — systemes differents)
-      - line_code_trns: code operateur (100=RATP, 800=SNCF — pas de FK vers dim_line)
-      - ticket_type → dim_ticket_type
+      - stop_id: code STIF numérique (pas de FK directe vers dim_stop — systèmes différents)
+      - line_code_trns: code opérateur (100=RATP, 800=SNCF — pas de FK vers dim_line)
+      - ticket_type → dim_ticket_type (jointure possible via ticket_type_name)
 
       **Partitionnement**: Par validation_date (DAY)
 
-      **Clustering**: stop_id, line_id, ticket_type
+      **Clustering**: stop_id, ticket_type
 
       **Matérialisation**: Incremental (INSERT_OVERWRITE sur nouvelles dates)
 
       **Refresh**: Quotidien
 
       **Rétention**: 2 ans
+
+      **Note V3**: stop_id reconciliation (STIF → IDFM) et line_code_trns → line_id mapping
+      sont des améliorations trackées dans le backlog V3.
     columns:
       - name: validation_key
-        description: "Clé surrogate unique (PK)"
+        description: "Clé surrogate unique (PK) — hash(stop_id, validation_date, ticket_type, line_code_trns)"
         tests:
           - not_null
           - unique:
@@ -161,6 +217,34 @@ models:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
+      - name: validation_month
+        description: "Mois de validation (DATE_TRUNC MONTH)"
+        tests:
+          - not_null
+      - name: year
+        description: "Année de validation"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2020
+              max_value: 2030
+              inclusive: true
+      - name: month
+        description: "Mois (1-12)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 12
+              inclusive: true
+      - name: day_of_week
+        description: "Jour de la semaine (1=Dimanche, 7=Samedi)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 7
+              inclusive: true
       - name: stop_id
         description: >
           Stop identifier using the STIF numeric code (e.g. '1', '10') from
@@ -179,6 +263,15 @@ models:
           a completely different concept from the operator code. Cannot be joined
           to dim_line without an intermediate mapping table — tracked as V3
           improvement (operator code to line_id mapping).
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['100', '760', '762', '800', '810', '820', '830', '840', '850', '860', '870', '880', '890']
+              severity: warn
+      - name: ticket_type
+        description: "Catégorie de titre (normalisée UPPER)"
+        tests:
+          - not_null
       - name: validation_count
         description: "Nombre de validations"
         tests:
@@ -201,7 +294,7 @@ models:
       **Clé primaire**: punctuality_key (surrogate)
 
       **Clés étrangères**:
-      - line_id → dim_line
+      - line_id → dim_line (156 lignes Transilien manquantes — V3 backlog)
 
       **Partitionnement**: Par month_date (MONTH)
 
@@ -222,8 +315,10 @@ models:
         description: "Premier jour du mois (partition key)"
         tests:
           - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
       - name: line_id
-        description: "FK → dim_line"
+        description: "FK → dim_line (WARN: 156 lignes Transilien non résolues)"
         tests:
           - not_null
           - relationships:
@@ -268,6 +363,8 @@ models:
         description: "Mois de référence"
         tests:
           - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
       - name: line_id
         description: "Identifiant ligne"
         tests:
@@ -275,9 +372,18 @@ models:
       - name: total_validations
         description: "Total validations du mois"
         tests:
+          - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
+      - name: avg_daily_validations
+        description: "Moyenne quotidienne de validations sur le mois"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+              severity: warn
       - name: punctuality_rate
         description: "Taux de régularité (%)"
         tests:
@@ -289,6 +395,7 @@ models:
       - name: risk_category
         description: "Catégorie de risque (high/medium/low)"
         tests:
+          - not_null
           - accepted_values:
               values: ['high_risk', 'medium_risk', 'low_risk']
 
