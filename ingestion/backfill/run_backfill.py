@@ -32,8 +32,8 @@ import yaml
 
 # Import sibling modules
 sys.path.insert(0, str(Path(__file__).parent))
-from parse_csv_historical import parse_file
 from load_backfill_bq import load_to_bigquery
+from parse_csv_historical import parse_file
 
 logging.basicConfig(
     level=logging.INFO,
