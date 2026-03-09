@@ -42,10 +42,18 @@ TARGET_COLUMNS = [
 
 # French month names -> zero-padded numbers (used for 2024 T4 date format)
 FRENCH_MONTHS = {
-    "janvier": "01", "février": "02", "mars": "03",
-    "avril": "04", "mai": "05", "juin": "06",
-    "juillet": "07", "août": "08", "septembre": "09",
-    "octobre": "10", "novembre": "11", "décembre": "12",
+    "janvier": "01",
+    "février": "02",
+    "mars": "03",
+    "avril": "04",
+    "mai": "05",
+    "juin": "06",
+    "juillet": "07",
+    "août": "08",
+    "septembre": "09",
+    "octobre": "10",
+    "novembre": "11",
+    "décembre": "12",
 }
 
 
@@ -109,12 +117,11 @@ def detect_format(filepath: Path) -> dict:
     # Detect date format from first data row
     first_value = sample.split(separator)[0].strip()
     if "/" in first_value:
-        date_format = "dd/mm/yyyy"    # e.g. 01/01/2023 or 01/07/24
+        date_format = "dd/mm/yyyy"  # e.g. 01/01/2023 or 01/07/24
     elif "-" in first_value and len(first_value) == 10:
-        date_format = "iso"           # e.g. 2024-10-01
+        date_format = "iso"  # e.g. 2024-10-01
     else:
-        date_format = "fr_long"       # e.g. 20 octobre 2024
-
+        date_format = "fr_long"  # e.g. 20 octobre 2024
 
     # Detect ZDC column name
     zdc_col = "lda" if "lda" in header.lower() else "ID_ZDC"
@@ -185,8 +192,12 @@ def normalize_dataframe(df: pd.DataFrame, fmt: dict) -> pd.DataFrame:
         parsed = pd.to_datetime(jour_raw, format="%d/%m/%Y", errors="coerce")
         mask = parsed.isna()
         if mask.any():
-            logger.info(f"Retrying {mask.sum()} dates with 2-digit year format (%d/%m/%y)")
-            parsed[mask] = pd.to_datetime(jour_raw[mask], format="%d/%m/%y", errors="coerce")
+            logger.info(
+                f"Retrying {mask.sum()} dates with 2-digit year format (%d/%m/%y)"
+            )
+            parsed[mask] = pd.to_datetime(
+                jour_raw[mask], format="%d/%m/%y", errors="coerce"
+            )
         df["jour"] = parsed.dt.date
     elif fmt["date_format"] == "iso":
         df["jour"] = pd.to_datetime(
@@ -204,10 +215,7 @@ def normalize_dataframe(df: pd.DataFrame, fmt: dict) -> pd.DataFrame:
     # Normalize string columns: strip whitespace + uppercase for consistency across files
     df["libelle_arret"] = df["libelle_arret"].str.strip().str.upper()
     df["categorie_titre"] = (
-        df["categorie_titre"]
-        .str.strip()
-        .str.upper()
-        .replace("?", "NON DEFINI")
+        df["categorie_titre"].str.strip().str.upper().replace("?", "NON DEFINI")
     )
 
     # # Cast numeric columns to nullable Int64 (handles NaN without float conversion)
@@ -216,11 +224,21 @@ def normalize_dataframe(df: pd.DataFrame, fmt: dict) -> pd.DataFrame:
     #         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
     # Cast numeric columns to nullable Int64
     # nb_vald may contain thousands separators (e.g. '1 268') — strip spaces first
-    for col in ["code_stif_trns", "code_stif_res", "code_stif_arret", "id_zdc", "nb_vald"]:
+    for col in [
+        "code_stif_trns",
+        "code_stif_res",
+        "code_stif_arret",
+        "id_zdc",
+        "nb_vald",
+    ]:
         if col in df.columns:
             df[col] = pd.to_numeric(
-                df[col].str.replace(" ", "", regex=False) if df[col].dtype == object else df[col],
-                errors="coerce"
+                (
+                    df[col].str.replace(" ", "", regex=False)
+                    if df[col].dtype == object
+                    else df[col]
+                ),
+                errors="coerce",
             ).astype("Int64")
 
     # Drop source-level duplicates before loading
@@ -246,7 +264,9 @@ def normalize_dataframe(df: pd.DataFrame, fmt: dict) -> pd.DataFrame:
 
     df = df[TARGET_COLUMNS]
 
-    logger.info(f"Normalized DataFrame: {len(df)} rows, {df['jour'].min()} -> {df['jour'].max()}")
+    logger.info(
+        f"Normalized DataFrame: {len(df)} rows, {df['jour'].min()} -> {df['jour'].max()}"
+    )
 
     return df
 
@@ -311,6 +331,8 @@ if __name__ == "__main__":
     # Deduplication check on natural key
     dupes = df.duplicated(subset=["jour", "code_stif_arret", "categorie_titre"]).sum()
     if dupes > 0:
-        print(f"\n⚠️  {dupes} duplicates found on key (jour, code_stif_arret, categorie_titre)")
+        print(
+            f"\n⚠️  {dupes} duplicates found on key (jour, code_stif_arret, categorie_titre)"
+        )
     else:
         print(f"\n✅ No duplicates on deduplication key")

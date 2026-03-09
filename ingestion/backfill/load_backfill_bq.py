@@ -97,7 +97,6 @@ def _load_to_staging(
     logger.info(f"Staging table loaded: {staging_table_id}")
 
 
-
 def _merge_into_target(
     client: bigquery.Client,
     staging_table_id: str,
@@ -109,9 +108,7 @@ def _merge_into_target(
     Returns the number of rows inserted.
     """
     # Build ON clause from merge key columns
-    on_clause = " AND ".join(
-        [f"T.{col} = S.{col}" for col in MERGE_KEY_COLS]
-    )
+    on_clause = " AND ".join([f"T.{col} = S.{col}" for col in MERGE_KEY_COLS])
 
     # Build INSERT column list
     col_list = ", ".join(ALL_COLUMNS)

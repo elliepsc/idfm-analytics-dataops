@@ -53,7 +53,9 @@ def load_manifest() -> dict:
 def save_manifest(manifest: dict) -> None:
     """Save updated manifest back to YAML."""
     with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(manifest, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        yaml.dump(
+            manifest, f, allow_unicode=True, sort_keys=False, default_flow_style=False
+        )
     logger.info(f"Manifest updated: {MANIFEST_PATH}")
 
 
@@ -80,7 +82,9 @@ def download_zip(url: str, dest_path: Path) -> None:
                 if total:
                     pct = downloaded / total * 100
                     if downloaded % (10 * 1024 * 1024) < chunk_size:  # log every ~10MB
-                        logger.info(f"  Progress: {pct:.0f}% ({downloaded // 1024 // 1024}MB)")
+                        logger.info(
+                            f"  Progress: {pct:.0f}% ({downloaded // 1024 // 1024}MB)"
+                        )
 
     logger.info(f"Download complete: {dest_path.name} ({downloaded // 1024 // 1024}MB)")
 
