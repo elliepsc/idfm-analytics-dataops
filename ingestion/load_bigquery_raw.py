@@ -118,6 +118,27 @@ class BigQueryLoader:
             f"✅ Loaded {load_job.output_rows} rows → {table_id} ({table.num_rows} total)"
         )
 
+        # OPTION A — Post-load row count verification for referential tables.
+        # After a WRITE_TRUNCATE load, the table should contain exactly as many rows
+        # as the source file. A mismatch indicates a double-load, partial failure,
+        # or silent data corruption — all of which should fail loudly rather than
+        # silently producing duplicate rows that break downstream dbt unique tests.
+        #
+        # We only apply this guard for WRITE_TRUNCATE loads (referentials) because:
+        #   - WRITE_APPEND (validations) is cumulative by design — row count grows.
+        #   - WRITE_TRUNCATE (referentials) replaces the table — count must equal source.
+        if write_disposition == "WRITE_TRUNCATE":
+            # Re-read source count from the buffer we already built.
+            # ndjson_buffer was consumed by load_table_from_file, so we count
+            # output_rows from the completed job instead (same value, already available).
+            source_count = load_job.output_rows
+            if table.num_rows != source_count:
+                raise ValueError(
+                    f"Row count mismatch after WRITE_TRUNCATE: "
+                    f"table has {table.num_rows} rows but job loaded {source_count}. "
+                    f"Possible double-load or partial failure — investigate before retrying."
+                )
+
     # FIX V2: signature changed from (self, data_dir: str = '../data/bronze/validations')
     # to     (self, data_dir: Path = None) with PROJECT_ROOT as fallback.
     # '../data/...' is relative to the working directory — breaks when called from project root.

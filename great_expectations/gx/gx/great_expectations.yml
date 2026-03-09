@@ -81,31 +81,19 @@ data_docs_sites:
     site_index_builder:
       class_name: DefaultSiteIndexBuilder
 fluent_datasources:
-  validations_source:
-    type: pandas
-    id: 6cef0d4b-eb5c-429a-957f-bf2503dfadfe
-    assets:
-      validations_asset:
-        type: dataframe
-        id: 550f88e8-6143-4b76-be88-f54db5e12d06
-        batch_metadata: {}
-        batch_definitions:
-          batch:
-            id: c8580e98-c8e5-4b3c-b381-cd7a79ddf7e5
-            partitioner:
   bigquery_raw:
     type: sql
-    id: cb596c23-21b3-41af-aad5-9914272cbf9d
+    id: 7ad85e1d-2e67-4d98-bb84-013ff0375153
     assets:
       raw_validations_asset:
         type: table
-        id: 7fbcccde-b6ec-4d15-ad8e-23eae81db08a
+        id: 5d5a5af8-88ad-4a2e-87a4-0c32270a4755
         batch_metadata: {}
         batch_definitions:
           full_table_batch:
-            id: 52a6c399-689e-4300-b3da-25c46ebd6581
+            id: 6eb87852-4db2-4a5f-ae1b-bb74340d7832
             partitioner:
         table_name: raw_validations
     connection_string: bigquery://idfm-analytics-dev-488611/transport_raw
 analytics_enabled:
-data_context_id: ddb871d9-e481-43d0-bada-2bcac08ed918
+data_context_id: c797111b-d0f7-416d-963c-7f4fe818cb89

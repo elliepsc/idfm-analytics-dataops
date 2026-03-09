@@ -1,0 +1,45 @@
+metadata:
+  target_table: idfm-analytics-dev-488611.transport_staging_raw.raw_validations
+  created_at: '2026-03-07'
+  note: Historical backfill for réseau ferré 2023-2024. Idempotent via MERGE strategy.
+sources:
+- file: data-rf-2023/data-rf-2023/2023_S1_NB_FER .txt
+  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/c46588b16704dd56dd252f97b4de05f1
+  zip_name: data-rf-2023.zip
+  description: Réseau ferré - S1 2023 (Jan-Jun)
+  network: ferre
+  period: 2023-S1
+  loaded: true
+  loaded_at: '2026-03-07T19:04:38Z'
+- file: data-rf-2023/data-rf-2023/2023_S2_NB_FER.txt
+  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/c46588b16704dd56dd252f97b4de05f1
+  zip_name: data-rf-2023.zip
+  description: Réseau ferré - S2 2023 (Jul-Dec)
+  network: ferre
+  period: 2023-S2
+  loaded: true
+  loaded_at: '2026-03-08T11:24:04Z'
+- file: data-rf-2024/2024_S1_NB_FER.txt
+  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/a6affe8c455cbcb6b8340c199421349f
+  zip_name: data-rf-2024.zip
+  description: Réseau ferré - S1 2024 (Jan-Jun)
+  network: ferre
+  period: 2024-S1
+  loaded: true
+  loaded_at: '2026-03-08T11:24:20Z'
+- file: data-rf-2024/2024_T3_NB_FER.txt
+  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/a6affe8c455cbcb6b8340c199421349f
+  zip_name: data-rf-2024.zip
+  description: Réseau ferré - T3 2024 (Jul-Sep)
+  network: ferre
+  period: 2024-T3
+  loaded: true
+  loaded_at: '2026-03-08T11:24:33Z'
+- file: validations-reseau-ferre-nombre-validations-par-jour-4eme-trimestre.csv
+  zip_url: null
+  zip_name: null
+  description: Réseau ferré - T4 2024 (Oct-Dec)
+  network: ferre
+  period: 2024-T4
+  loaded: true
+  loaded_at: '2026-03-08T11:24:45Z'
