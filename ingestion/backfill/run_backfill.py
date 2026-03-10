@@ -43,6 +43,45 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_PATH = Path(__file__).parent / "backfill_sources.yml"
 
+# IDFM catalog API — returns one record per year with ZIP download URL
+IDFM_CATALOG_URL = (
+    "https://data.iledefrance-mobilites.fr/api/explore/v2.1/"
+    "catalog/datasets/histo-validations-reseau-ferre/records?limit=20"
+)
+
+
+def resolve_zip_url(year: str) -> str:
+    """
+    Dynamically resolve the ZIP download URL for a given year
+    from the IDFM catalog API.
+
+    This avoids hardcoding file hashes that change when IDFM updates their data.
+    The API returns one record per year with the current download URL.
+
+    Args:
+        year: e.g. "2023" or "2024"
+
+    Returns:
+        Download URL for the ZIP file of that year.
+
+    Raises:
+        ValueError: if no ZIP is found for the given year.
+    """
+    logger.info(f"Resolving ZIP URL for year {year} from IDFM catalog API...")
+    response = requests.get(IDFM_CATALOG_URL, timeout=30)
+    response.raise_for_status()
+
+    for record in response.json().get("results", []):
+        if record.get("annee") == year:
+            url = record["reseau_ferre"]["url"]
+            logger.info(f"Resolved URL for {year}: {url}")
+            return url
+
+    raise ValueError(
+        f"No ZIP found for year {year} in IDFM catalog. "
+        f"Available years: {[r.get('annee') for r in response.json().get('results', [])]}"
+    )
+
 
 def load_manifest() -> dict:
     """Load the backfill manifest from YAML."""
@@ -59,10 +98,11 @@ def save_manifest(manifest: dict) -> None:
     logger.info(f"Manifest updated: {MANIFEST_PATH}")
 
 
-def download_zip(url: str, dest_path: Path) -> None:
+def download_file(url: str, dest_path: Path) -> None:
     """
-    Download a ZIP file from URL to dest_path.
+    Download any file from URL to dest_path.
     Shows progress every 10MB.
+    Works for both ZIP and CSV files.
     """
     logger.info(f"Downloading: {url}")
     logger.info(f"Destination: {dest_path}")
@@ -81,7 +121,7 @@ def download_zip(url: str, dest_path: Path) -> None:
                 downloaded += len(chunk)
                 if total:
                     pct = downloaded / total * 100
-                    if downloaded % (10 * 1024 * 1024) < chunk_size:  # log every ~10MB
+                    if downloaded % (10 * 1024 * 1024) < chunk_size:
                         logger.info(
                             f"  Progress: {pct:.0f}% ({downloaded // 1024 // 1024}MB)"
                         )
@@ -100,8 +140,18 @@ def extract_zip(zip_path: Path, extract_dir: Path) -> None:
 def ensure_file_available(source: dict, base_dir: Path) -> Path:
     """
     Ensure the source file is available locally.
-    If not, download the ZIP and extract it.
-    Returns the resolved file path.
+    Downloads and extracts if needed.
+
+    source_type controls the download strategy:
+      - "zip"        (default): download ZIP, extract, find file inside
+      - "csv_direct": download CSV directly (no ZIP)
+
+    zip_url can be:
+      - "dynamic": resolved at runtime from IDFM catalog API using source["year"]
+      - a direct URL: used as-is
+      - null: file must already exist locally (raises FileNotFoundError if missing)
+
+    Returns the resolved local file path.
     """
     filepath = base_dir / source["file"]
 
@@ -109,9 +159,18 @@ def ensure_file_available(source: dict, base_dir: Path) -> Path:
         logger.info(f"File already available: {filepath.name}")
         return filepath
 
-    # File missing — check if ZIP download is configured
+    source_type = source.get("source_type", "zip")
     zip_url = source.get("zip_url")
     zip_name = source.get("zip_name")
+
+    # Resolve dynamic URL at runtime
+    if zip_url == "dynamic":
+        year = source.get("year")
+        if not year:
+            raise ValueError(
+                f"source_type is 'zip' with zip_url='dynamic' but no 'year' field: {source['period']}"
+            )
+        zip_url = resolve_zip_url(year)
 
     if not zip_url:
         raise FileNotFoundError(
@@ -119,18 +178,24 @@ def ensure_file_available(source: dict, base_dir: Path) -> Path:
             f"Please download manually or add zip_url to backfill_sources.yml"
         )
 
-    # Download ZIP if not already present
+    # CSV direct — download file directly without ZIP extraction
+    if source_type == "csv_direct":
+        logger.info(f"Downloading CSV directly: {filepath.name}")
+        download_file(zip_url, filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"File still not found after download: {filepath}")
+        return filepath
+
+    # ZIP flow — download ZIP then extract
     zip_path = base_dir / zip_name
     if not zip_path.exists():
         logger.info(f"ZIP not found locally, downloading: {zip_name}")
-        download_zip(zip_url, zip_path)
+        download_file(zip_url, zip_path)
     else:
         logger.info(f"ZIP already downloaded: {zip_name}")
 
-    # Extract ZIP
     extract_zip(zip_path, base_dir)
 
-    # Verify file now exists
     if not filepath.exists():
         raise FileNotFoundError(
             f"File still not found after extraction: {filepath}\n"
