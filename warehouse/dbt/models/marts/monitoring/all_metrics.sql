@@ -30,9 +30,17 @@ all_metrics AS (
 ),
 
 sla_config AS (
-  SELECT 'fct_validations_daily'          AS table_name, 30       AS sla_hours UNION ALL
-  SELECT 'fct_punctuality_monthly',        24 * 45 UNION ALL
-  SELECT 'mart_network_scorecard_monthly', 24 * 45
+  SELECT
+'fct_validations_daily' AS table_name,
+30 AS sla_hours
+UNION ALL
+  SELECT
+'fct_punctuality_monthly',
+24 * 45
+UNION ALL
+  SELECT
+'mart_network_scorecard_monthly',
+24 * 45
 ),
 
 final AS (
@@ -45,8 +53,8 @@ final AS (
     m.duplicate_count,
     s.sla_hours,
     (m.freshness_hours <= s.sla_hours AND m.row_count > 0) AS sla_met
-  FROM all_metrics m
-  LEFT JOIN sla_config s ON m.table_name = s.table_name
+  FROM all_metrics AS m
+  LEFT JOIN sla_config AS s ON m.table_name = s.table_name
 )
 
 SELECT * FROM final

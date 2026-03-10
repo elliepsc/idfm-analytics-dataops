@@ -17,20 +17,17 @@ WITH sla_config AS (
 ),
 
 table_stats AS (
-  SELECT
-    table_id AS table_name,
-    row_count,
-    TIMESTAMP_DIFF(
-      CURRENT_TIMESTAMP(),
-      TIMESTAMP_MILLIS(last_modified_time),
-      HOUR
-    ) AS freshness_hours
-  FROM `{{ env_var('GCP_PROJECT_ID') }}.transport_analytics.__TABLES__`
-  WHERE table_id IN (
-    'fct_validations_daily',
-    'fct_punctuality_monthly',
-    'mart_network_scorecard_monthly'
-  )
+  SELECT table_id AS table_name, row_count,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(last_modified_time), HOUR) AS freshness_hours
+  FROM `{{ env_var('GCP_PROJECT_ID') }}.{{ target.dataset }}_core.__TABLES__`
+  WHERE table_id IN ('fct_validations_daily', 'fct_punctuality_monthly')
+
+  UNION ALL
+
+  SELECT table_id AS table_name, row_count,
+    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP_MILLIS(last_modified_time), HOUR) AS freshness_hours
+  FROM `{{ env_var('GCP_PROJECT_ID') }}.{{ target.dataset }}_analytics.__TABLES__`
+  WHERE table_id IN ('mart_network_scorecard_monthly')
 )
 
 SELECT
