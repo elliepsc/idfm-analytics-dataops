@@ -44,8 +44,8 @@ combined AS (
     p.punctuality_rate,
     p.quality_category
 
-  FROM punctuality_monthly p
-  LEFT JOIN validations_monthly v
+  FROM punctuality_monthly AS p
+  LEFT JOIN validations_monthly AS v
     ON p.month_date = v.month_date
 ),
 
@@ -87,8 +87,8 @@ enriched AS (
       ELSE 'low_risk'
     END AS risk_category
 
-  FROM combined c
-  LEFT JOIN {{ ref('dim_line') }} l ON c.line_id = l.line_id
+  FROM combined AS c
+  LEFT JOIN {{ ref('dim_line') }} AS l ON c.line_id = l.line_id
 )
 
 SELECT

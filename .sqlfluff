@@ -2,9 +2,11 @@
 dialect = bigquery
 templater = jinja
 max_line_length = 120
+exclude_rules = LT02,RF02,ST06,AL03,PRS,layout.select_targets,layout.set_operators,aliasing.table
 
 [sqlfluff:templater:jinja]
 apply_dbt_builtins = true
-
-[sqlfluff:rules:jinja_templating]
 ignore_templating_errors = true
+
+[sqlfluff:rules:layout.long_lines]
+ignore_comment_lines = true

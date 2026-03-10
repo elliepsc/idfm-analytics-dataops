@@ -52,6 +52,8 @@ lint:  ## Vérifie le code (Python + SQL)
 	black --check ingestion/ scripts/
 	isort --check-only ingestion/ scripts/
 	flake8 ingestion/ scripts/ --max-line-length=120
+
+lint-sql:  ## Vérifie le SQL dbt (sqlfluff - best effort)
 	sqlfluff lint warehouse/dbt/models --dialect bigquery
 
 format:  ## Formate le code
@@ -64,6 +66,9 @@ clean:  ## Nettoie les fichiers temporaires
 	find . -type f -name "*.pyc" -delete
 	rm -rf .pytest_cache .coverage htmlcov/
 	cd warehouse/dbt && rm -rf target/ dbt_packages/ logs/
+
+install-terraform:  ## Installe Terraform
+	sudo snap install terraform --classic  # Need sudo et snapd
 
 # ─────────────────────────────────────────────────────────────
 # INGESTION

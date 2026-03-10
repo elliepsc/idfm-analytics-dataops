@@ -14,9 +14,9 @@ cleaned AS (
   SELECT
     -- FIX V2: field 'month' is YYYY-MM format (STRING) — use PARSE_DATE('%Y-%m', month)
     -- V1 used PARSE_DATE('%Y-%m-%d', month) which fails because there is no day component.
-    PARSE_DATE('%Y-%m', month) AS month_date,
-    EXTRACT(YEAR FROM PARSE_DATE('%Y-%m', month)) AS year,
-    EXTRACT(MONTH FROM PARSE_DATE('%Y-%m', month)) AS month_num,
+    PARSE_DATE('%Y-%m', MONTH) AS month_date,
+    EXTRACT(YEAR FROM PARSE_DATE('%Y-%m', MONTH)) AS year,
+    EXTRACT(MONTH FROM PARSE_DATE('%Y-%m', MONTH)) AS month_num,
 
     -- Identifiers
     UPPER(TRIM(line_id)) AS line_id,
