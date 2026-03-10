@@ -1,45 +1,80 @@
 metadata:
-  target_table: idfm-analytics-dev-488611.transport_staging_raw.raw_validations
+  target_table: idfm-analytics-dev-488611.transport_raw.raw_validations
   created_at: '2026-03-07'
-  note: Historical backfill for réseau ferré 2023-2024. Idempotent via MERGE strategy.
+  note: 'Historical backfill for réseau ferré 2023-2024. Idempotent via MERGE strategy.
+    zip_url: "dynamic" = URL resolved at runtime from IDFM catalog API (handles hash
+    changes). source_type: "csv_direct" = direct CSV download, no ZIP extraction.
+
+    '
 sources:
 - file: data-rf-2023/data-rf-2023/2023_S1_NB_FER .txt
-  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/c46588b16704dd56dd252f97b4de05f1
+  zip_url: dynamic
   zip_name: data-rf-2023.zip
+  year: '2023'
+  source_type: zip
   description: Réseau ferré - S1 2023 (Jan-Jun)
   network: ferre
   period: 2023-S1
   loaded: true
   loaded_at: '2026-03-07T19:04:38Z'
 - file: data-rf-2023/data-rf-2023/2023_S2_NB_FER.txt
-  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/c46588b16704dd56dd252f97b4de05f1
+  zip_url: dynamic
   zip_name: data-rf-2023.zip
+  year: '2023'
+  source_type: zip
   description: Réseau ferré - S2 2023 (Jul-Dec)
   network: ferre
   period: 2023-S2
   loaded: true
   loaded_at: '2026-03-08T11:24:04Z'
 - file: data-rf-2024/2024_S1_NB_FER.txt
-  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/a6affe8c455cbcb6b8340c199421349f
+  zip_url: dynamic
   zip_name: data-rf-2024.zip
+  year: '2024'
+  source_type: zip
   description: Réseau ferré - S1 2024 (Jan-Jun)
   network: ferre
   period: 2024-S1
   loaded: true
   loaded_at: '2026-03-08T11:24:20Z'
 - file: data-rf-2024/2024_T3_NB_FER.txt
-  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/histo-validations-reseau-ferre/files/a6affe8c455cbcb6b8340c199421349f
+  zip_url: dynamic
   zip_name: data-rf-2024.zip
+  year: '2024'
+  source_type: zip
   description: Réseau ferré - T3 2024 (Jul-Sep)
   network: ferre
   period: 2024-T3
   loaded: true
   loaded_at: '2026-03-08T11:24:33Z'
-- file: validations-reseau-ferre-nombre-validations-par-jour-4eme-trimestre.csv
-  zip_url: null
+- file: validations-reseau-ferre-T4-2024.csv
+  zip_url: https://storage.googleapis.com/idfm-backfill-sources/validations-reseau-ferre-T4-2024.csv
   zip_name: null
-  description: Réseau ferré - T4 2024 (Oct-Dec)
+  year: '2024'
+  source_type: csv_direct
+  description: Réseau ferré - T4 2024 (Oct-Dec) — snapshot figé dans GCS public
+  note: 'L''URL IDFM originale est glissante (mise à jour avec données 2025). Ce snapshot
+    a été capturé le 2026-03-08 et archivé dans GCS public pour reproductibilité.
+    Quand IDFM intégrera T4 dans data-rf-2024.zip, mettre zip_url: dynamic et file:
+    data-rf-2024/2024_T4_NB_FER.txt (ou équivalent).
+
+    '
   network: ferre
   period: 2024-T4
   loaded: true
   loaded_at: '2026-03-08T11:24:45Z'
+- file: validations-reseau-ferre-nombre-validations-par-jour-recent.csv
+  zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/validations-reseau-ferre-nombre-validations-par-jour-4eme-trimestre/exports/csv
+  zip_name: null
+  year: '2025'
+  source_type: csv_direct
+  description: Réseau ferré - données récentes 2025 (dataset glissant IDFM)
+  note: 'Dataset glissant mis à jour par IDFM avec les trimestres les plus récents.
+    Le MERGE idempotent évite les doublons avec les données déjà chargées. Mettre
+    loaded: false et relancer pour rafraîchir avec les dernières données.
+
+    '
+  network: ferre
+  period: 2025-recent
+  loaded: true
+  loaded_at: '2026-03-10T11:37:09Z'
