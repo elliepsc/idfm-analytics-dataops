@@ -101,3 +101,17 @@ warehouse/dbt/dbt_internal_packages_data/
 
 great_expectations/gx/uncommitted/
 data/raw/*.json
+
+# Terraform state — never commit these files
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+
+# Variables sensibles
+terraform.tfvars
+*.auto.tfvars
+
+*backup
