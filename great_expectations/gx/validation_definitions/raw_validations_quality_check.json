@@ -1,0 +1,22 @@
+{
+  "data": {
+    "asset": {
+      "id": "7fbcccde-b6ec-4d15-ad8e-23eae81db08a",
+      "name": "raw_validations_asset"
+    },
+    "batch_definition": {
+      "id": "52a6c399-689e-4300-b3da-25c46ebd6581",
+      "name": "full_table_batch"
+    },
+    "datasource": {
+      "id": "cb596c23-21b3-41af-aad5-9914272cbf9d",
+      "name": "bigquery_raw"
+    }
+  },
+  "id": "f0d5f8c7-650a-4899-845a-4490c4d677d4",
+  "name": "raw_validations_quality_check",
+  "suite": {
+    "id": "d07b7a5f-244c-4a38-bf7f-d1e7b797048e",
+    "name": "validations_rail_quality"
+  }
+}

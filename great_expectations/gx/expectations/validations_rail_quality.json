@@ -1,0 +1,84 @@
+{
+  "expectations": [
+    {
+      "id": "1691a1bc-1b7f-4da0-84b3-12744df6ec7a",
+      "kwargs": {
+        "column": "date"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_to_exist"
+    },
+    {
+      "id": "6e9f32f8-9229-4c2c-a3c8-e1ca28daa691",
+      "kwargs": {
+        "column": "stop_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_to_exist"
+    },
+    {
+      "id": "70228c09-0c00-44a1-b962-125aaefcd23e",
+      "kwargs": {
+        "column": "validation_count"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_to_exist"
+    },
+    {
+      "id": "c7c0e4ae-6506-42b9-8fb5-7e2dd12083d7",
+      "kwargs": {
+        "column": "ticket_type"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_to_exist"
+    },
+    {
+      "id": "bbc3e4d2-1d78-4fd3-81a5-00423461a2e1",
+      "kwargs": {
+        "column": "date"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "3e2521b0-adf3-409e-83e5-ced1e0d20ba5",
+      "kwargs": {
+        "column": "stop_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "145ad1fe-e175-48b5-af44-9af2fdf2f88e",
+      "kwargs": {
+        "column": "validation_count"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "d74a0a7e-d582-492d-a806-7af08cf1f3ab",
+      "kwargs": {
+        "column": "validation_count",
+        "max_value": 1000000.0,
+        "min_value": 0.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    }
+  ],
+  "id": "d07b7a5f-244c-4a38-bf7f-d1e7b797048e",
+  "meta": {
+    "great_expectations_version": "1.14.0"
+  },
+  "name": "validations_rail_quality",
+  "notes": null
+}

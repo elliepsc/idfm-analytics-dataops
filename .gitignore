@@ -116,3 +116,15 @@ terraform.tfvars
 
 *backup
 *.fixed.sql
+
+# Great Expectations config files — keep in repo (whitelisted from *.json rule)
+!great_expectations/gx/expectations/*.json
+!great_expectations/gx/checkpoints/*.json
+!great_expectations/gx/validation_definitions/*.json
+
+# Airflow runtime data — output des DAGs, jamais commiter
+orchestration/airflow/data/
+
+# dbt docs generated — trop lourds pour le repo (manifest.json 963KB)
+docs/manifest.json
+docs/catalog.json
