@@ -113,6 +113,14 @@ dbt-compile:  ## Compile models (no execution)
 dbt-parse:  ## Parse models (CI)
 	cd warehouse/dbt && $(DBT) parse --profiles-dir . --profile transport_ci --target ci
 
+dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_validations_daily)
+	docker exec -it airflow-airflow-scheduler-1 bash -c \
+	  "cd /opt/airflow/warehouse/dbt && \
+	   /home/airflow/.local/bin/dbt run \
+	   --select $(MODEL) \
+	   --full-refresh \
+	   --target prod"
+
 # ─────────────────────────────────────────────────────────────
 # MONITORING
 # ─────────────────────────────────────────────────────────────
