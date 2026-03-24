@@ -32,8 +32,8 @@ SELECT
   year,
   month,
   day_of_week,
-
   stop_id,
+  stop_name,
   line_code_trns,
   line_code_res,
   ticket_type,
