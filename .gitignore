@@ -76,8 +76,8 @@ htmlcov/
 # Airflow specific
 orchestration/airflow/logs/*
 !orchestration/airflow/logs/.gitkeep
-orchestration/airflow/data/*
-!orchestration/airflow/data/.gitkeep
+# orchestration/airflow/data/*
+# !orchestration/airflow/data/.gitkeep
 orchestration/airflow/.airflowignore
 airflow-webserver.pid
 airflow-scheduler.pid
@@ -122,9 +122,12 @@ terraform.tfvars
 !great_expectations/gx/checkpoints/*.json
 !great_expectations/gx/validation_definitions/*.json
 
-# Airflow runtime data — output des DAGs, jamais commiter
-orchestration/airflow/data/
-
 # dbt docs generated — trop lourds pour le repo (manifest.json 963KB)
 docs/manifest.json
 docs/catalog.json
+
+# Bronze data - gitkeep to keep the folder structure, but ignore all actual data files
+orchestration/airflow/data/bronze/**/*.json
+orchestration/airflow/data/bronze/**/*.parquet
+!orchestration/airflow/data/bronze/**/.gitkeep
+*/.gitkeep
