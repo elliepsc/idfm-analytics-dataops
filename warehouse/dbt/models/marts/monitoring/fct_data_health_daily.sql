@@ -33,17 +33,44 @@ table_stats AS (
 SELECT
   sla.table_name,
   CURRENT_DATE() AS metric_date,
-  COALESCE(t.row_count, 0) AS row_count,
+  COALESCE(t.row_count, 0)      AS row_count,
   COALESCE(t.freshness_hours, 9999) AS freshness_hours,
   sla.sla_hours,
+
+  -- SLA respect (booleen — for dbt tests and airflow sensors)
   (
     COALESCE(t.freshness_hours, 9999) <= sla.sla_hours
     AND COALESCE(t.row_count, 0) > 0
   ) AS sla_met,
+
+  -- SLA respect (numeric for Looker visualisation)
   CASE
-    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours
-      AND COALESCE(t.row_count, 0) > 0 THEN 1
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours THEN 1
     ELSE 0
-  END AS sla_numeric
+  END AS sla_numeric,
+
+  -- Delta freshness vs SLA (negative = under SLA, positive = breach)
+  COALESCE(t.freshness_hours, 9999) - sla.sla_hours AS freshness_delta,
+
+  -- Business status label
+  CASE
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours        THEN 'OK'
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours * 1.2  THEN 'WARNING'
+    ELSE 'CRITICAL'
+  END AS sla_status_label,
+
+  -- Freshness ratio vs SLA (0.5 = safe, 1.0 = at limit, >1 = breached)
+  CASE
+    WHEN sla.sla_hours = 0 THEN NULL
+    ELSE COALESCE(t.freshness_hours, 9999) / sla.sla_hours
+  END AS freshness_ratio,
+
+  -- Sort order for Looker (1=OK, 2=WARNING, 3=CRITICAL)
+  CASE
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours        THEN 1
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours * 1.2  THEN 2
+    ELSE 3
+  END AS sla_status_order
+
 FROM sla_config sla
 LEFT JOIN table_stats t ON sla.table_name = t.table_name

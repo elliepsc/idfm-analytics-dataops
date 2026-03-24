@@ -1,28 +1,28 @@
 version: 2
 
 exposures:
-  - name: tableau_bord_ponctualite
+  - name: punctuality_dashboard
     type: dashboard
     maturity: medium
     owner:
       name: Data Team
       email: data@idfm.fr
     description: >
-      Dashboard de suivi de la ponctualite mensuelle par ligne et service.
+      Dashboard tracking monthly punctuality by line and service.
     depends_on:
       - ref('fct_punctuality_monthly')
       - ref('dim_line')
       - ref('mart_network_scorecard_monthly')
     tags: ['dashboard', 'punctuality']
 
-  - name: rapport_validations_quotidien
+  - name: daily_validations_report
     type: dashboard
     maturity: high
     owner:
       name: Data Team
       email: data@idfm.fr
     description: >
-      Rapport quotidien des validations par arret, ligne et type de titre.
+      Daily report of ticket validations by stop, line and ticket type.
     depends_on:
       - ref('fct_validations_daily')
       - ref('dim_stop')
@@ -30,14 +30,14 @@ exposures:
       - ref('dim_ticket_type')
     tags: ['dashboard', 'validations']
 
-  - name: monitoring_qualite_donnees
+  - name: data_quality_monitoring
     type: ml
     maturity: low
     owner:
       name: Data Team
       email: data@idfm.fr
     description: >
-      Monitoring de la qualite des donnees et SLA du pipeline.
+      Pipeline data quality and SLA monitoring.
     depends_on:
       - ref('fct_data_health_daily')
       - ref('all_metrics')

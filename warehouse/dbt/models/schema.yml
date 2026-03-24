@@ -1,86 +1,86 @@
-# Tests et documentation des modèles dbt
-# V3 — enrichi : ~75 tests (vs 56 en V2)
+# dbt model tests and documentation
+# V3 — enriched: 88 tests
 models:
   # ─────────────────────────────────────────────────────────────
   # STAGING
   # ─────────────────────────────────────────────────────────────
   - name: stg_validations_rail_daily
-    description: "Validations réseau ferré - données staging nettoyées et dédupliquées"
+    description: "Rail network ticket validations - cleaned and deduplicated staging data"
     columns:
       - name: validation_date
-        description: "Date de validation"
-        tests:
+        description: "Validation date"
+        data_tests:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: validation_month
-        description: "Mois de validation (DATE_TRUNC MONTH)"
-        tests:
+        description: "Validation month (DATE_TRUNC MONTH)"
+        data_tests:
           - not_null
       - name: year
-        description: "Année de validation"
-        tests:
+        description: "Validation year"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 2020
               max_value: 2030
               inclusive: true
       - name: month
-        description: "Mois (1-12)"
-        tests:
+        description: "Month number (1-12)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 1
               max_value: 12
               inclusive: true
       - name: day_of_week
-        description: "Jour de la semaine (1=Dimanche, 7=Samedi en BigQuery)"
-        tests:
+        description: "Day of week (1=Sunday, 7=Saturday in BigQuery)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 1
               max_value: 7
               inclusive: true
       - name: stop_id
-        description: "Identifiant arrêt (code STIF numérique)"
-        tests:
+        description: "Stop identifier (STIF numeric code)"
+        data_tests:
           - not_null
       - name: line_code_trns
-        description: "Code opérateur transport (100=RATP, 800=SNCF)"
-        tests:
+        description: "Operator code (100=RATP, 800=SNCF)"
+        data_tests:
           - not_null
       - name: ticket_type
-        description: "Catégorie de titre (normalisée UPPER)"
-        tests:
+        description: "Ticket category (normalized UPPER)"
+        data_tests:
           - not_null
       - name: validation_count
-        description: "Nombre de validations"
-        tests:
+        description: "Number of validations"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
       - name: ingestion_ts
-        description: "Timestamp d'ingestion"
-        tests:
+        description: "Ingestion timestamp"
+        data_tests:
           - not_null
 
   - name: stg_punctuality_monthly
-    description: "Ponctualité Transilien - données staging nettoyées"
+    description: "Transilien punctuality - cleaned staging data"
     columns:
       - name: month_date
-        description: "Premier jour du mois"
-        tests:
+        description: "First day of the month"
+        data_tests:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: line_id
-        description: "Identifiant ligne"
-        tests:
+        description: "Line identifier"
+        data_tests:
           - not_null
       - name: punctuality_rate
-        description: "Taux de régularité (%)"
-        tests:
+        description: "Punctuality rate (%)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
@@ -92,35 +92,35 @@ models:
   # ─────────────────────────────────────────────────────────────
   - name: dim_stop
     description: |
-      **Dimension des arrêts**
+      **Stop dimension**
 
-      **Grain**: 1 arrêt unique (stop_id)
+      **Grain**: 1 unique stop (stop_id)
 
-      **Source**: IDFM référentiel arrêts
+      **Source**: IDFM stop referential
 
-      **Refresh**: Quotidien (TRUNCATE + reload)
+      **Refresh**: Daily (TRUNCATE + reload)
 
-      **Usage**: Jointure avec fct_validations_daily
+      **Usage**: Join with fct_validations_daily
     columns:
       - name: stop_id
-        description: "Identifiant unique de l'arrêt (PK) — format IDFM:xxxxx"
-        tests:
+        description: "Unique stop identifier (PK) — IDFM:xxxxx format"
+        data_tests:
           - not_null
           - unique
       - name: stop_name
-        description: "Nom de l'arrêt"
-        tests:
+        description: "Stop name"
+        data_tests:
           - not_null
       - name: latitude
-        description: "Latitude WGS84 (Île-de-France : 48.0–49.5)"
-        tests:
+        description: "WGS84 latitude (Ile-de-France: 48.0-49.5)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 48.0
               max_value: 49.5
       - name: longitude
-        description: "Longitude WGS84 (Île-de-France : 1.5–3.5)"
-        tests:
+        description: "WGS84 longitude (Ile-de-France: 1.5-3.5)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 1.5
@@ -128,52 +128,51 @@ models:
 
   - name: dim_line
     description: |
-      **Dimension des lignes**
+      **Line dimension**
 
-      **Grain**: 1 ligne unique (line_id)
+      **Grain**: 1 unique line (line_id)
 
-      **Source**: IDFM référentiel lignes
+      **Source**: IDFM line referential
 
-      **Refresh**: Quotidien (TRUNCATE + reload)
+      **Refresh**: Daily (TRUNCATE + reload)
     columns:
       - name: line_id
-        description: "Identifiant unique de la ligne (PK) — format IDFM Cxxxxx"
-        tests:
+        description: "Unique line identifier (PK) — IDFM Cxxxxx format"
+        data_tests:
           - not_null
           - unique
       - name: line_name
-        description: "Nom de la ligne"
-        tests:
+        description: "Line name"
+        data_tests:
           - not_null
       - name: transport_mode
-        description: "Mode de transport (RER, METRO, TRAIN, etc.)"
-        tests:
+        description: "Transport mode (RER, METRO, TRAIN, etc.)"
+        data_tests:
           - not_null
           - accepted_values:
               values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR']
-              # values: ['100', '800', '760', '762', '810', '820', '830', '840', '850', '860', '870', '880', '890']
               severity: warn
       - name: operator
-        description: "Exploitant (RATP, SNCF, etc.)"
-        tests:
+        description: "Transport operator (RATP, SNCF, etc.)"
+        data_tests:
           - not_null
 
   - name: dim_ticket_type
     description: |
-      **Dimension des types de titres**
+      **Ticket type dimension**
 
-      **Grain**: 1 catégorie de titre unique
+      **Grain**: 1 unique ticket category
 
-      **Source**: Extrait des validations (DISTINCT)
+      **Source**: Extracted from validations (DISTINCT)
     columns:
       - name: ticket_type_id
-        description: "Identifiant surrogate (PK)"
-        tests:
+        description: "Surrogate identifier (PK)"
+        data_tests:
           - not_null
           - unique
       - name: ticket_type_name
-        description: "Nom de la catégorie"
-        tests:
+        description: "Category name"
+        data_tests:
           - not_null
 
   # ─────────────────────────────────────────────────────────────
@@ -181,65 +180,65 @@ models:
   # ─────────────────────────────────────────────────────────────
   - name: fct_validations_daily
     description: |
-      **Fait des validations quotidiennes**
+      **Daily validations fact table**
 
-      **Grain**: 1 arrêt × 1 jour × 1 type de titre × 1 opérateur
+      **Grain**: 1 stop x 1 day x 1 ticket type x 1 operator
 
-      **Clé primaire**: validation_key (surrogate sur stop_id + validation_date + ticket_type + line_code_trns)
+      **Primary key**: validation_key (surrogate on stop_id + validation_date + ticket_type + line_code_trns)
 
-      **Identifiants disponibles**:
-      - stop_id: code STIF numérique (pas de FK directe vers dim_stop — systèmes différents)
-      - line_code_trns: code opérateur (100=RATP, 800=SNCF — pas de FK vers dim_line)
-      - ticket_type → dim_ticket_type (jointure possible via ticket_type_name)
+      **Available identifiers**:
+      - stop_id: STIF numeric code (no direct FK to dim_stop — different systems)
+      - line_code_trns: operator code (100=RATP, 800=SNCF — no FK to dim_line)
+      - ticket_type -> dim_ticket_type (join possible via ticket_type_name)
 
-      **Partitionnement**: Par validation_date (DAY)
+      **Partitioning**: By validation_date (DAY)
 
       **Clustering**: stop_id, ticket_type
 
-      **Matérialisation**: Incremental (INSERT_OVERWRITE sur nouvelles dates)
+      **Materialization**: Incremental (INSERT_OVERWRITE on new dates)
 
-      **Refresh**: Quotidien
+      **Refresh**: Daily
 
-      **Rétention**: 2 ans
+      **Retention**: 2 years
 
-      **Note V3**: stop_id reconciliation (STIF → IDFM) et line_code_trns → line_id mapping
-      sont des améliorations trackées dans le backlog V3.
+      **Note V3**: stop_id reconciliation (STIF -> IDFM) and line_code_trns -> line_id mapping
+      are improvements tracked in the V3 backlog.
     columns:
       - name: validation_key
-        description: "Clé surrogate unique (PK) — hash(stop_id, validation_date, ticket_type, line_code_trns)"
-        tests:
+        description: "Unique surrogate key (PK) — hash(stop_id, validation_date, ticket_type, line_code_trns)"
+        data_tests:
           - not_null
           - unique:
               severity: warn
       - name: validation_date
-        description: "Date de validation (partition key)"
-        tests:
+        description: "Validation date (partition key)"
+        data_tests:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: validation_month
-        description: "Mois de validation (DATE_TRUNC MONTH)"
-        tests:
+        description: "Validation month (DATE_TRUNC MONTH)"
+        data_tests:
           - not_null
       - name: year
-        description: "Année de validation"
-        tests:
+        description: "Validation year"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 2020
               max_value: 2030
               inclusive: true
       - name: month
-        description: "Mois (1-12)"
-        tests:
+        description: "Month number (1-12)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 1
               max_value: 12
               inclusive: true
       - name: day_of_week
-        description: "Jour de la semaine (1=Dimanche, 7=Samedi)"
-        tests:
+        description: "Day of week (1=Sunday, 7=Saturday in BigQuery)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 1
@@ -253,7 +252,11 @@ models:
           dim_stop.stop_id uses the IDFM API format (e.g. 'IDFM:11639'), a different
           identifier system for the same physical stops. A direct join requires a
           mapping table — tracked as V3 improvement (stop_id reconciliation).
-        tests:
+        data_tests:
+          - not_null
+      - name: stop_name
+        description: "Station name from IDFM source data. Used for display in dashboards."
+        data_tests:
           - not_null
       - name: line_code_trns
         description: >
@@ -263,71 +266,71 @@ models:
           a completely different concept from the operator code. Cannot be joined
           to dim_line without an intermediate mapping table — tracked as V3
           improvement (operator code to line_id mapping).
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
               values: ['100', '760', '762', '800', '810', '820', '830', '840', '850', '860', '870', '880', '890']
               severity: warn
       - name: ticket_type
-        description: "Catégorie de titre (normalisée UPPER)"
-        tests:
+        description: "Ticket category (normalized UPPER)"
+        data_tests:
           - not_null
       - name: validation_count
-        description: "Nombre de validations"
-        tests:
+        description: "Number of validations"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
           - assert_positive_values
       - name: ingestion_ts
-        description: "Timestamp d'ingestion (pour freshness monitoring)"
-        tests:
+        description: "Ingestion timestamp (used for freshness monitoring)"
+        data_tests:
           - not_null
 
   - name: fct_punctuality_monthly
     description: |
-      **Fait de la ponctualité mensuelle**
+      **Monthly punctuality fact table**
 
-      **Grain**: 1 ligne × 1 mois
+      **Grain**: 1 line x 1 month
 
-      **Clé primaire**: punctuality_key (surrogate)
+      **Primary key**: punctuality_key (surrogate)
 
-      **Clés étrangères**:
-      - line_id → dim_line (156 lignes Transilien manquantes — V3 backlog)
+      **Foreign keys**:
+      - line_id -> dim_line (156 Transilien lines unresolved — V3 backlog)
 
-      **Partitionnement**: Par month_date (MONTH)
+      **Partitioning**: By month_date (MONTH)
 
       **Clustering**: line_id
 
-      **Matérialisation**: Incremental
+      **Materialization**: Incremental
 
-      **Refresh**: Mensuel (+ 5 jours après fin de mois)
+      **Refresh**: Monthly (+ 5 days after month end)
     columns:
       - name: punctuality_key
-        description: "Clé surrogate unique (PK)"
-        tests:
+        description: "Unique surrogate key (PK)"
+        data_tests:
           - not_null
           - unique:
               config:
                 severity: warn
       - name: month_date
-        description: "Premier jour du mois (partition key)"
-        tests:
+        description: "First day of the month (partition key)"
+        data_tests:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: line_id
-        description: "FK → dim_line (WARN: 156 lignes Transilien non résolues)"
-        tests:
+        description: "FK -> dim_line (WARN: 156 Transilien lines unresolved)"
+        data_tests:
           - not_null
           - relationships:
               to: ref('dim_line')
               severity: warn
               field: line_id
       - name: punctuality_rate
-        description: "Taux de régularité (0-100%)"
-        tests:
+        description: "Punctuality rate (0-100%)"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
@@ -339,20 +342,20 @@ models:
   # ─────────────────────────────────────────────────────────────
   - name: mart_network_scorecard_monthly
     description: |
-      **Scorecard réseau mensuel**
+      **Monthly network scorecard**
 
-      **Grain**: 1 ligne × 1 mois
+      **Grain**: 1 line x 1 month
 
-      **Combine**:
+      **Combines**:
       - Demand metrics (validations)
-      - Quality metrics (ponctualité)
+      - Quality metrics (punctuality)
       - Risk indicators
 
-      **Usage**: Dashboard principal / Alerting
+      **Usage**: Main dashboard / Alerting
 
-      **Refresh**: Quotidien
+      **Refresh**: Daily
 
-      **KPI clés**:
+      **Key KPIs**:
       - Total validations
       - Avg daily validations
       - MoM growth %
@@ -360,41 +363,41 @@ models:
       - Risk category
     columns:
       - name: month_date
-        description: "Mois de référence"
-        tests:
+        description: "Reference month"
+        data_tests:
           - not_null
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: line_id
-        description: "Identifiant ligne"
-        tests:
+        description: "Line identifier"
+        data_tests:
           - not_null
       - name: total_validations
-        description: "Total validations du mois"
-        tests:
+        description: "Total validations for the month"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
       - name: avg_daily_validations
-        description: "Moyenne quotidienne de validations sur le mois"
-        tests:
+        description: "Average daily validations over the month"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
               severity: warn
       - name: punctuality_rate
-        description: "Taux de régularité (%)"
-        tests:
+        description: "Punctuality rate (%)"
+        data_tests:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
               inclusive: true
               severity: warn
       - name: risk_category
-        description: "Catégorie de risque (high/medium/low)"
-        tests:
+        description: "Risk category (high/medium/low)"
+        data_tests:
           - not_null
           - accepted_values:
               values: ['high_risk', 'medium_risk', 'low_risk']
@@ -404,53 +407,77 @@ models:
   # ─────────────────────────────────────────────────────────────
   - name: fct_data_health_daily
     description: |
-      **Monitoring quotidien de la santé des données**
+      **Daily data health monitoring**
 
-      **Grain**: 1 table × 1 date
+      **Grain**: 1 table x 1 date
 
-      **Métriques trackées**:
+      **Tracked metrics**:
       - Row count
       - Freshness (hours since last ingestion)
-      - Null percentage
-      - Duplicate count
       - SLA compliance
 
-      **SLA par table**:
+      **SLA per table**:
       - fct_validations_daily: 30h
-      - fct_punctuality_monthly: 45 jours
-      - mart_network_scorecard_monthly: 45 jours
+      - fct_punctuality_monthly: 45 days
+      - mart_network_scorecard_monthly: 45 days
 
-      **Usage**: CI/CD data-quality checks
+      **Usage**: CI/CD data-quality checks + Looker Studio SLA dashboard
     columns:
       - name: table_name
-        description: "Nom de la table monitorée"
-        tests:
+        description: "Name of the monitored table"
+        data_tests:
           - not_null
           - accepted_values:
               values: ['fct_validations_daily', 'fct_punctuality_monthly', 'mart_network_scorecard_monthly']
       - name: metric_date
-        description: "Date du snapshot monitoring"
-        tests:
+        description: "Monitoring snapshot date"
+        data_tests:
           - not_null
       - name: row_count
-        description: "Nombre de lignes dans la table"
-        tests:
+        description: "Number of rows in the table"
+        data_tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
       - name: freshness_hours
-        description: "Heures depuis dernière ingestion"
-        tests:
+        description: "Hours since last ingestion"
+        data_tests:
           - not_null
       - name: sla_hours
-        description: "SLA cible (heures)"
-        tests:
+        description: "Target SLA (hours)"
+        data_tests:
           - not_null
       - name: sla_met
-        description: "SLA respecté (booléen)"
-        tests:
+        description: "SLA met (boolean) — used by dbt tests and Airflow sensors"
+        data_tests:
           - not_null
           - accepted_values:
               values: [true, false]
+              quote: false
+      - name: sla_numeric
+        description: "SLA compliance as integer (1=met, 0=breached) — for Looker visualisation"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: freshness_delta
+        description: "Hours between current freshness and SLA threshold (negative=under SLA, positive=breach)"
+        data_tests:
+          - not_null
+      - name: sla_status_label
+        description: "Business status label based on freshness vs SLA (OK / WARNING / CRITICAL)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['OK', 'WARNING', 'CRITICAL']
+      - name: freshness_ratio
+        description: "Freshness as ratio of SLA threshold (0.5=safe, 1.0=at limit, >1=breached)"
+      - name: sla_status_order
+        description: "Numeric sort order for Looker (1=OK, 2=WARNING, 3=CRITICAL)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3]
               quote: false
