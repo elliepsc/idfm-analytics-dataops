@@ -39,6 +39,11 @@ SELECT
   (
     COALESCE(t.freshness_hours, 9999) <= sla.sla_hours
     AND COALESCE(t.row_count, 0) > 0
-  ) AS sla_met
+  ) AS sla_met,
+  CASE
+    WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours
+      AND COALESCE(t.row_count, 0) > 0 THEN 1
+    ELSE 0
+  END AS sla_numeric
 FROM sla_config sla
 LEFT JOIN table_stats t ON sla.table_name = t.table_name
