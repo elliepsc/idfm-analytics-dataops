@@ -126,8 +126,9 @@ terraform.tfvars
 docs/manifest.json
 docs/catalog.json
 
-# Bronze data - gitkeep to keep the folder structure, but ignore all actual data files
+# Bronze data - keep folder structure, ignore actual data files
 orchestration/airflow/data/bronze/**/*.json
 orchestration/airflow/data/bronze/**/*.parquet
-!orchestration/airflow/data/bronze/**/.gitkeep
-*/.gitkeep
+!orchestration/airflow/data/**/.gitkeep
+!orchestration/airflow/data/.gitkeep
+
