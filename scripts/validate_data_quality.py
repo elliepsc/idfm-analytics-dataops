@@ -1,5 +1,5 @@
 """
-Great Expectations - Validation pipeline IDFM
+Great Expectations - pipeline Validation IDFM
 """
 
 import json
@@ -22,7 +22,7 @@ logger.setLevel(logging.INFO)
 
 
 def get_or_create_suite(context):
-    """Crée ou récupère la suite d expectations."""
+    """Create or retrieve the expectations suite."""
     try:
         return context.suites.get("validations_rail_quality")
     except Exception:
@@ -52,7 +52,7 @@ def get_or_create_suite(context):
 
 
 def validate_validations(data_dir: str = "data/raw") -> bool:
-    """Valide les fichiers de validations rail contre les expectations GE."""
+    """Validate rail validation files against GE expectations."""
     context = gx.get_context(mode="file", project_root_dir="great_expectations")
 
     files = sorted(Path(data_dir).glob("validations_*.json"))

@@ -1,5 +1,5 @@
 """
-Monitoring DAG — métriques pipeline, alertes seuils, santé des données.
+Monitoring DAG — piplines metrics & data quality checks
 Schedule: Daily at 7 AM (after transport_daily_pipeline at 2 AM)
 """
 
@@ -38,7 +38,7 @@ default_args = {
 
 
 def check_validations_threshold(**context):
-    """Alerte si nombre de validations sous le seuil."""
+    """Alerts if the number of ticket validations is below the expected threshold."""
     execution_date = context["ds"]
     ok = check_validation_count_threshold(
         project_id=PROJECT_ID,
@@ -50,7 +50,7 @@ def check_validations_threshold(**context):
 
 
 def check_punctuality_lag(**context):
-    """Alerte si données de ponctualité trop anciennes."""
+    """Alerts if the punctuality data is too old."""
     execution_date = context["ds"]
     ok = check_punctuality_freshness(
         project_id=PROJECT_ID,
@@ -62,7 +62,7 @@ def check_punctuality_lag(**context):
 
 
 def log_pipeline_metrics(**context):
-    """Log les métriques du run dans BigQuery."""
+    """Log the metrics of the run in BigQuery."""
     dag_run = context["dag_run"]
     log_dag_metric(
         project_id=PROJECT_ID,

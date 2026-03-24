@@ -1,10 +1,9 @@
---- Référentiel des arrêts - version latest
+--- Stopping point reference staging model - latest version
 
 {{
   config(
     materialized='view',
-    description='Référentiel des arrêts - version latest'
-  )
+    description='Stop reference staging model - latest version (1 record per stop_id, with data quality checks and transformations applied)'
 }}
 
 WITH source AS (
@@ -13,21 +12,21 @@ WITH source AS (
 
 latest AS (
   SELECT
-    -- Identifiants
+    -- Identifiers
     UPPER(TRIM(stop_id)) AS stop_id,
     TRIM(stop_name) AS stop_name,
 
-    -- Géolocalisation
+    -- Geolocalisation
     CAST(latitude AS FLOAT64) AS latitude,
     CAST(longitude AS FLOAT64) AS longitude,
 
-    -- Localisation
+    -- Location
     TRIM(town) AS town,
 
     -- Metadata
     CAST(ingestion_ts AS TIMESTAMP) AS ingestion_ts,
 
-    -- Row number pour déduplication
+    -- Row number for deduplication
     ROW_NUMBER() OVER (
       PARTITION BY UPPER(TRIM(stop_id))
       ORDER BY CAST(ingestion_ts AS TIMESTAMP) DESC
@@ -38,7 +37,7 @@ latest AS (
   WHERE
     stop_id IS NOT NULL
     AND stop_name IS NOT NULL
-    -- Coordonnées valides (approximativement Île-de-France)
+    -- Valid geolocalisation for Île-de-France (approximate bounding box)
     AND CAST(latitude AS FLOAT64) BETWEEN 48.0 AND 49.5
     AND CAST(longitude AS FLOAT64) BETWEEN 1.5 AND 3.5
 )
@@ -51,4 +50,4 @@ SELECT
   town,
   ingestion_ts
 FROM latest
-WHERE rn = 1  -- Garde la version la plus récente
+WHERE rn = 1  -- Keep only the latest record for each stop_id based on ingestion timestamp

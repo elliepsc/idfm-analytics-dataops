@@ -1,14 +1,14 @@
 dimensions:
   dim_stop:
-    grain: "1 arrêt unique (stop_id)"
+    grain: "1 unique stop (stop_id)"
     primary_key: "stop_id"
     columns:
       - name: stop_id
         type: STRING
-        description: "Identifiant unique de l'arrêt"
+        description: "Unique stop identifier"
       - name: stop_name
         type: STRING
-        description: "Nom de l'arrêt"
+        description: "Stop name"
       - name: latitude
         type: FLOAT64
         description: "Latitude (WGS84)"
@@ -17,38 +17,38 @@ dimensions:
         description: "Longitude (WGS84)"
       - name: town
         type: STRING
-        description: "Commune"
+        description: "Municipality"
       - name: updated_at
         type: TIMESTAMP
-        description: "Dernière mise à jour"
+        description: "Last update timestamp"
 
   dim_line:
-    grain: "1 ligne unique (line_id)"
+    grain: "1 unique line (line_id)"
     primary_key: "line_id"
     columns:
       - name: line_id
         type: STRING
-        description: "Identifiant unique de la ligne"
+        description: "Unique line identifier"
       - name: line_name
         type: STRING
-        description: "Nom de la ligne"
+        description: "Line name"
       - name: transport_mode
         type: STRING
-        description: "Mode de transport (RER, Métro, Train, etc.)"
+        description: "Transport mode (RER, Metro, Train, etc.)"
       - name: operator
         type: STRING
-        description: "Exploitant (RATP, SNCF, etc.)"
+        description: "Transport operator (RATP, SNCF, etc.)"
       - name: updated_at
         type: TIMESTAMP
-        description: "Dernière mise à jour"
+        description: "Last update timestamp"
 
   dim_date:
-    grain: "1 jour calendaire"
+    grain: "1 calendar day"
     primary_key: "date"
-    description: "Dimension calendaire standard (dbt_date package)"
+    description: "Standard date dimension (dbt_date package)"
 
   dim_ticket_type:
-    grain: "1 catégorie de titre de transport"
+    grain: "1 unique ticket category"
     primary_key: "ticket_type_id"
     columns:
       - name: ticket_type_id
@@ -58,7 +58,7 @@ dimensions:
 
 facts:
   fct_validations_daily:
-    grain: "1 arrêt × 1 jour × 1 type de titre"
+    grain: "1 stop x 1 day x 1 ticket type"
     primary_key: "CONCAT(stop_id, '-', validation_date, '-', ticket_type)"
     foreign_keys:
       - dim_stop(stop_id)
@@ -68,19 +68,22 @@ facts:
     columns:
       - name: validation_date
         type: DATE
-        description: "Date de validation"
+        description: "Validation date"
       - name: stop_id
         type: STRING
+      - name: stop_name
+        type: STRING
+        description: "Station name"
       - name: line_id
         type: STRING
       - name: ticket_type
         type: STRING
       - name: validation_count
         type: INTEGER
-        description: "Nombre de validations"
+        description: "Number of validations"
       - name: ingestion_ts
         type: TIMESTAMP
-        description: "Timestamp d'ingestion (pour freshness monitoring)"
+        description: "Ingestion timestamp (used for freshness monitoring)"
     partitioning:
       field: "validation_date"
       type: "DAY"
@@ -90,19 +93,19 @@ facts:
       - "ticket_type"
 
   fct_punctuality_monthly:
-    grain: "1 ligne × 1 mois"
+    grain: "1 line x 1 month"
     primary_key: "CONCAT(line_id, '-', month_date)"
     foreign_keys:
       - dim_line(line_id)
     columns:
       - name: month_date
         type: DATE
-        description: "Premier jour du mois"
+        description: "First day of the month"
       - name: line_id
         type: STRING
       - name: punctuality_rate
         type: FLOAT64
-        description: "Taux de régularité (0-100)"
+        description: "Punctuality rate (0-100)"
       - name: trains_planned
         type: INTEGER
       - name: trains_departed
@@ -117,8 +120,8 @@ facts:
 
 marts:
   mart_network_scorecard_monthly:
-    grain: "1 ligne × 1 mois (demand + quality)"
-    description: "Scorecard réseau combinant demande et qualité"
+    grain: "1 line x 1 month (demand + quality)"
+    description: "Network scorecard combining demand and quality metrics"
     columns:
       - name: month_date
         type: DATE
@@ -130,23 +133,23 @@ marts:
         type: STRING
       - name: total_validations
         type: INTEGER
-        description: "Total validations du mois"
+        description: "Total validations for the month"
       - name: avg_daily_validations
         type: FLOAT64
       - name: punctuality_rate
         type: FLOAT64
       - name: mom_validation_growth
         type: FLOAT64
-        description: "Croissance month-over-month (%)"
+        description: "Month-over-month growth (%)"
       - name: risk_score
         type: FLOAT64
-        description: "Score de risque (validations baisse + ponctualité dégradée)"
+        description: "Risk score (validation drop + degraded punctuality)"
       - name: ingestion_ts
         type: TIMESTAMP
 
   fct_data_health_daily:
-    grain: "1 table × 1 date"
-    description: "Monitoring qualité des données (freshness, volume, SLA)"
+    grain: "1 table x 1 date"
+    description: "Data quality monitoring (freshness, volume, SLA)"
     columns:
       - name: table_name
         type: STRING

@@ -1,4 +1,4 @@
--- Dimension - Lignes
+-- Dimension - Lines
 
 {{
   config(

@@ -1,6 +1,6 @@
 """
-Monitoring utilities — métriques DAG, alertes seuils, logging BigQuery.
-Utilisé par monitoring_dag.py et transport_daily_pipeline.py.
+Monitoring utilities — Dag metrics & data quality checks.
+Used by monitoring_dag.py et transport_daily_pipeline.py.
 """
 
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 # ═════════════════════════════════════════════════════════════════
-# DAG Metrics — logging vers BigQuery
+# DAG Metrics — logging to BigQuery
 # ═════════════════════════════════════════════════════════════════
 
 
@@ -26,7 +26,7 @@ def log_dag_metric(
     nb_records: Optional[int] = None,
     extra: Optional[dict] = None,
 ) -> None:
-    """Log une métrique DAG dans BigQuery transport_raw.dag_metrics."""
+    """Log a DAG metric in BigQuery transport_raw.dag_metrics."""
     try:
         from google.cloud import bigquery
 
@@ -55,7 +55,7 @@ def log_dag_metric(
 
 
 # ═════════════════════════════════════════════════════════════════
-# Alertes sur seuils
+# Alerts — threshold checks & Slack notifications
 # ═════════════════════════════════════════════════════════════════
 
 
@@ -65,8 +65,8 @@ def check_validation_count_threshold(
     min_records: int = 100,
 ) -> bool:
     """
-    Vérifie que le nombre de validations du jour dépasse le seuil minimum.
-    Retourne True si OK, False si anomalie détectée.
+    Checks that the number of validations for the day exceeds the minimum threshold.
+    Returns True if OK, False if an anomaly is detected.
     """
     try:
         from google.cloud import bigquery
@@ -103,8 +103,8 @@ def check_punctuality_freshness(
     max_lag_days: int = 45,
 ) -> bool:
     """
-    Vérifie que les données de ponctualité ne sont pas trop anciennes.
-    Retourne True si OK, False si données trop vieilles.
+    Checks that the punctuality data is not too old.
+    Returns True if OK, False if the data is too stale.
     """
     try:
         from google.cloud import bigquery
@@ -146,7 +146,7 @@ def check_punctuality_freshness(
 
 
 def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
-    """Callback Airflow appelé quand un SLA est manqué."""
+    """Callback Airflow called when an SLA is missed."""
     missed = [str(s.task_id) for s in slas]
     logger.error("❌ SLA manqué pour les tâches: %s", missed)
 

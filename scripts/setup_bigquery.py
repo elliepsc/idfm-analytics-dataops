@@ -1,4 +1,4 @@
-# Création des datasets et tables BigQuery
+# Dataset and table setup script for BigQuery - creates datasets and tables if they don't exist
 import logging
 import os
 
@@ -15,14 +15,14 @@ load_dotenv()
 
 
 def setup_bigquery():
-    """Crée les datasets et tables BigQuery nécessaires"""
+    """Create BigQuery datasets and tables if they don't exist"""
 
     project_id = os.getenv("GCP_PROJECT_ID")
     region = os.getenv("GCP_REGION", "europe-west1")
 
     client = bigquery.Client(project=project_id)
 
-    # Datasets à créer
+    # Datasets to create
     datasets = [
         os.getenv("BQ_DATASET_RAW", "transport_raw"),
         os.getenv("BQ_DATASET_STAGING", "transport_staging"),
@@ -37,7 +37,7 @@ def setup_bigquery():
             client.get_dataset(dataset_ref)
             logger.info(f"Dataset {dataset_ref} already exists")
         except NotFound:
-            # Créer le dataset
+            # Creation of dataset with location and description
             dataset = bigquery.Dataset(dataset_ref)
             dataset.location = region
             dataset.description = f"Transport scorecard - {dataset_id}"
@@ -45,7 +45,7 @@ def setup_bigquery():
             dataset = client.create_dataset(dataset)
             logger.info(f"Created dataset {dataset_ref}")
 
-    # Tables RAW avec schéma simple (auto-detect gérera le reste)
+    # Raw tables to create with their schemas
     raw_dataset = os.getenv("BQ_DATASET_RAW", "transport_raw")
 
     raw_tables = {

@@ -2,30 +2,30 @@ idfm:
   base_url: "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
   datasets:
     # -------------------------------------------------------------------------
-    # VALIDATIONS RÉSEAU FERRÉ
-    # Dataset sans suffixe d'année = dataset "courant", mis à jour chaque trim.
-    # Vérifié par curl le 2026-02-27 : 469,376 records, champs à la racine
-    # ⚠️  Ce dataset couvre le trimestre en cours uniquement.
-    #     Pour données historiques > 1 trimestre, enchaîner plusieurs datasets :
+    # RAIL NETWORK TICKET VALIDATIONS
+    # Dataset without year suffix = "current" dataset, updated each quarter.
+    # Verified via curl on 2026-02-27: 469,376 records, fields at root level.
+    # ⚠️  This dataset covers the current quarter only.
+    #     For historical data > 1 quarter, chain multiple datasets:
     #     validations-reseau-ferre-nombre-validations-par-jour-{N}eme-trimestre
     # -------------------------------------------------------------------------
     validations_rail:
       id: "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre"
       fields:
         date: "jour"                      # YYYY-MM-DD
-        stop_id: "code_stif_arret"        # ID arrêt STIF (ex: "401")
-        stop_name: "libelle_arret"        # Nom lisible (ex: "LA HACQUINIERE")
-        line_code_trns: "code_stif_trns"  # Code transport STIF (ex: "810")
-        line_code_res: "code_stif_res"    # Code réseau STIF (ex: "802")
-        ticket_type: "categorie_titre"    # Type de titre (ex: "Amethyste")
-        validation_count: "nb_vald"       # Nombre de validations (int)
+        stop_id: "code_stif_arret"        # STIF stop ID (e.g. "401")
+        stop_name: "libelle_arret"        # Human-readable name (e.g. "LA HACQUINIERE")
+        line_code_trns: "code_stif_trns"  # STIF transport code (e.g. "810")
+        line_code_res: "code_stif_res"    # STIF network code (e.g. "802")
+        ticket_type: "categorie_titre"    # Ticket category (e.g. "Amethyste")
+        validation_count: "nb_vald"       # Number of validations (int)
       filters:
         date_field: "jour"
     # -------------------------------------------------------------------------
-    # RÉFÉRENTIEL ARRÊTS
-    # Dataset dénormalisé : 1 stop peut avoir N lignes → doublons normaux
-    # Vérifié V1 : 73,840 records bruts → 8,526 stops uniques
-    # ⚠️  API paginée à 10,000 records max — stops extraits = 10,000/73,264
+    # STOP REFERENTIAL
+    # Denormalized dataset: 1 stop × N lines → expected duplicates
+    # Verified V1: 73,840 raw records → 8,526 unique stops
+    # ⚠️  API paginated at 10,000 records max — extracted stops = 10,000/73,264
     # -------------------------------------------------------------------------
     ref_stops:
       id: "arrets-lignes"
@@ -36,7 +36,7 @@ idfm:
         longitude: "stop_lon"
         town: "nom_commune"
     # -------------------------------------------------------------------------
-    # RÉFÉRENTIEL LIGNES
+    # LINE REFERENTIAL
     # -------------------------------------------------------------------------
     ref_lines:
       id: "referentiel-des-lignes"
@@ -46,11 +46,11 @@ idfm:
         transport_mode: "transportmode"
         operator: "operatorname"
     # -------------------------------------------------------------------------
-    # RÉFÉRENTIEL ARRÊTS-LIGNES (jointure) — DÉSACTIVÉ V2
-    # ⚠️  arrets-lignes ne contient pas de champ line_id exploitable.
-    # ⚠️  Dataset plafonné à 10,000 records sur 73,264 disponibles.
-    # TODO V4 : implémenter via GTFS IDFM (stops.txt + routes.txt + stop_times.txt)
-    #           https://data.iledefrance-mobilites.fr/explore/dataset/offre-horaires-tc-gtfs-idfm
+    # STOP-LINE MAPPING (join table) — DISABLED V2
+    # ⚠️  arrets-lignes does not contain a usable line_id field.
+    # ⚠️  Dataset capped at 10,000 records out of 73,264 available.
+    # TODO V4: implement via IDFM GTFS feed (stops.txt + routes.txt + stop_times.txt)
+    #          https://data.iledefrance-mobilites.fr/explore/dataset/offre-horaires-tc-gtfs-idfm
     # -------------------------------------------------------------------------
     # ref_stop_lines:
     #   id: "arrets-lignes"
@@ -62,19 +62,19 @@ transilien:
   base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
   datasets:
     # -------------------------------------------------------------------------
-    # PONCTUALITÉ MENSUELLE TRANSILIEN
-    # Vérifié par curl le 2026-02-27 : 1,983 records
-    # Format date : YYYY-MM (pas YYYY-MM-DD !)
-    # ⚠️  taux_regularite n'existe PAS → c'est taux_de_ponctualite
-    # ⚠️  nombre_de_trains_prevu / partis n'existent PAS dans ce dataset
+    # TRANSILIEN MONTHLY PUNCTUALITY
+    # Verified via curl on 2026-02-27: 1,983 records
+    # Date format: YYYY-MM (not YYYY-MM-DD!)
+    # ⚠️  taux_regularite does NOT exist → correct field is taux_de_ponctualite
+    # ⚠️  nombre_de_trains_prevu / partis do NOT exist in this dataset
     # -------------------------------------------------------------------------
     punctuality:
       id: "ponctualite-mensuelle-transilien"
       fields:
-        month: "date"                              # Format YYYY-MM (ex: "2013-01")
-        service: "service"                         # Type réseau (ex: "RER")
-        line_id: "ligne"                           # Code ligne (ex: "A")
-        line_name: "nom_de_la_ligne"               # Nom complet (ex: "RER A")
-        punctuality_rate: "taux_de_ponctualite"    # % ponctualité (ex: 83.6)
+        month: "date"                              # Format YYYY-MM (e.g. "2013-01")
+        service: "service"                         # Network type (e.g. "RER")
+        line_id: "ligne"                           # Line code (e.g. "A")
+        line_name: "nom_de_la_ligne"               # Full name (e.g. "RER A")
+        punctuality_rate: "taux_de_ponctualite"    # Punctuality % (e.g. 83.6)
       filters:
         date_field: "date"

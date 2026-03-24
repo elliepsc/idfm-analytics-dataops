@@ -1,4 +1,4 @@
-# Vérification des SLA via fct_data_health_daily
+# Check SLA compliance via fct_data_health_daily
 import logging
 import os
 import sys
@@ -16,8 +16,8 @@ load_dotenv()
 
 def check_sla():
     """
-    Vérifie les SLA via la table fct_data_health_daily
-    Retourne exit code 1 si breach détecté, 0 sinon
+    Check SLA compliance via the fct_data_health_daily table
+    Returns exit code 1 if a breach is detected, 0 otherwise
     """
     project_id = os.getenv("GCP_PROJECT_ID")
     dataset = os.getenv("BQ_DATASET_ANALYTICS", "transport_staging_analytics")
@@ -25,7 +25,7 @@ def check_sla():
 
     client = bigquery.Client(project=project_id)
 
-    # Query pour détecter les breaches des 2 derniers jours
+    # Query to detect breaches for the last 2 days
     query = f"""
     SELECT
       table_name,
@@ -50,7 +50,7 @@ def check_sla():
             logger.info("✅ SLA OK - No breaches detected")
             return 0
 
-        # Breaches détectées
+        # Breaches detected
         logger.error(f"❌ SLA BREACH - {len(results)} violation(s) detected")
 
         for row in results:

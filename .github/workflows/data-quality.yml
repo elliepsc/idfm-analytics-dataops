@@ -1,9 +1,9 @@
-# Data Quality CI - Version locale (sans credentials GCP)
+# Data Quality CI - locale version (without credentials GCP)
 # ═══════════════════════════════════════════════════════════════
-# V4 TODO: Activer les étapes GCP avec Workload Identity Federation
-# - Décommenter les sections marquées [V4-GCP]
-# - Configurer WIF sur GCP Console
-# - Ajouter secrets: GCP_PROJECT_ID, WIF_PROVIDER, WIF_SERVICE_ACCOUNT
+# V4 TODO: Activate real dbt tests on BigQuery with Workload Identity Federation (WIF)
+# - Uncomment the sections marked [V4-GCP]
+# - Configure WIF on GCP Console
+# - Add secrets: GCP_PROJECT_ID, WIF_PROVIDER, WIF_SERVICE_ACCOUNT
 # ═══════════════════════════════════════════════════════════════
 
 name: Data Quality
@@ -52,7 +52,7 @@ jobs:
           GCP_PROJECT_ID=dummy-project dbt compile --profiles-dir /tmp --profile transport_ci --target ci
         continue-on-error: true
 
-      # [V4-GCP] Décommenter pour activer les tests dbt réels sur BigQuery
+      # [V4-GCP] uncomment to run real dbt tests on BigQuery with Workload Identity Federation (WIF)
       # - name: Authenticate to GCP (WIF)
       #   uses: google-github-actions/auth@v2
       #   with:
@@ -90,7 +90,7 @@ jobs:
           python3 scripts/validate_data_quality.py
 
 
-      # [V4-GCP] Décommenter pour valider contre BigQuery réel
+      # [V4-GCP] Uncomment to run SLA compliance checks with real data on BigQuery
       # - name: Check SLA compliance
       #   run: python scripts/check_sla.py
 

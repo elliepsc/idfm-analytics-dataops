@@ -1,9 +1,8 @@
--- Staging - Référentiel lignes
-
+-- Staging - Reference Lines
 {{
   config(
     materialized='view',
-    description='Référentiel des lignes - version latest'
+    description='Line reference data from the source system (grain = 1 ligne unique)'
   )
 }}
 
@@ -13,7 +12,7 @@ WITH source AS (
 
 latest AS (
   SELECT
-    -- Identifiants
+    -- Identifiers
     UPPER(TRIM(line_id)) AS line_id,
     TRIM(line_name) AS line_name,
 
@@ -24,7 +23,7 @@ latest AS (
     -- Metadata
     CAST(ingestion_ts AS TIMESTAMP) AS ingestion_ts,
 
-    -- Row number pour déduplication
+    -- Row number for deduplication
     ROW_NUMBER() OVER (
       PARTITION BY UPPER(TRIM(line_id))
       ORDER BY CAST(ingestion_ts AS TIMESTAMP) DESC

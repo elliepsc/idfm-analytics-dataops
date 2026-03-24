@@ -1,9 +1,9 @@
--- Dimension - Arrêts
+-- Dimension - Stops
 
 {{
   config(
     materialized='table',
-    description='Dimension des arrêts (grain = 1 arrêt unique)'
+    description='Stop reference data from the source system (grain = 1 unique stop)'
   )
 }}
 

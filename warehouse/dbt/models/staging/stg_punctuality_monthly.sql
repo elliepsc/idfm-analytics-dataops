@@ -1,8 +1,8 @@
--- Staging - Ponctualité Transilien - mensuelle
+-- Staging - Ponctuality Monthly
 {{
   config(
     materialized='view',
-    description='Ponctualité Transilien - nettoyée et normalisée'
+    description='Punctuality performance data at monthly grain, with quality categorization (grain = 1 line_id x month)'
   )
 }}
 
@@ -23,8 +23,8 @@ cleaned AS (
     TRIM(line_name) AS line_name,
 
     -- FIX V2: removed trains_planned and trains_departed — these fields do NOT exist
-    -- in the ponctualite-mensuelle-transilien dataset (confirmed via API exploration 2026-02-27).
-    -- Only taux_de_ponctualite is available.
+    -- in the raw data and were erroneously included in V1. Only punctuality_rate is available.
+    -- Only punctuality_rate is available.
     CAST(punctuality_rate AS FLOAT64) AS punctuality_rate,
 
     -- Derived quality indicator
