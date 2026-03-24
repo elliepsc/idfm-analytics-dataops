@@ -4,6 +4,7 @@
   config(
     materialized='view',
     description='Stop reference staging model - latest version (1 record per stop_id, with data quality checks and transformations applied)'
+  )
 }}
 
 WITH source AS (

@@ -9,11 +9,12 @@ exposures:
       email: data@idfm.fr
     description: >
       Dashboard tracking monthly punctuality by line and service.
+    config:
+      tags: ['dashboard', 'punctuality']
     depends_on:
       - ref('fct_punctuality_monthly')
       - ref('dim_line')
       - ref('mart_network_scorecard_monthly')
-    tags: ['dashboard', 'punctuality']
 
   - name: daily_validations_report
     type: dashboard
@@ -23,12 +24,13 @@ exposures:
       email: data@idfm.fr
     description: >
       Daily report of ticket validations by stop, line and ticket type.
+    config:
+      tags: ['dashboard', 'validations']
     depends_on:
       - ref('fct_validations_daily')
       - ref('dim_stop')
       - ref('dim_line')
       - ref('dim_ticket_type')
-    tags: ['dashboard', 'validations']
 
   - name: data_quality_monitoring
     type: ml
@@ -38,7 +40,8 @@ exposures:
       email: data@idfm.fr
     description: >
       Pipeline data quality and SLA monitoring.
+    config:
+      tags: ['monitoring', 'data-quality']
     depends_on:
       - ref('fct_data_health_daily')
       - ref('all_metrics')
-    tags: ['monitoring', 'data-quality']
