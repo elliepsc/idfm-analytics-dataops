@@ -407,6 +407,16 @@ dbt documentation with full lineage DAG: https://elliepsc.github.io/idfm-analyti
 
 Sources: `fct_validations_daily` (4.1M rows, 2023–2025) · `fct_punctuality_monthly` (12 Transilien lines, 2024) · `fct_data_health_daily`
 
+## Dashboard
+
+Interactive dashboard: [Open in Looker Studio](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+
+## Preview
+
+[![Looker Page 1](docs/looker/looker_page1.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+[![Looker Page 2](docs/looker/looker_page2.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+[![Looker Page 3](docs/looker/looker_page3.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+
 ---
 
 ## 🔁 Steps to Reproduce

@@ -128,6 +128,16 @@ dbt docs generate && dbt docs serve
 | 3 | Punctuality Analysis | Punctuality rate by line and month · Avg punctuality by line |
 | 4 | Data Health — SLA Pipeline | Freshness gauge · SLA status table (3 tables monitored, all ✅) |
 
+## Dashboard
+
+Interactive dashboard: [Open in Looker Studio](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+
+## Preview
+
+[![Looker Page 1](docs/looker/looker_page1.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+[![Looker Page 2](docs/looker/looker_page2.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+[![Looker Page 3](docs/looker/looker_page3.png)](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)
+
 ---
 
 ### ✅ Reproducibility (4/4)
