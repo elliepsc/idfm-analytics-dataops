@@ -27,6 +27,7 @@
 - [CI/CD](#-cicd)
 - [Dashboard](#-dashboard)
 - [Steps to Reproduce](#-steps-to-reproduce)
+- [Dev vs Prod Environments](#-dev-vs-prod-environments)
 - [Project Structure](#-project-structure)
 - [Architecture Decisions](#-architecture-decisions)
 
@@ -55,8 +56,8 @@ This is a complete end-to-end data engineering project that:
 2. **Loads** raw data into BigQuery (Bronze layer)
 3. **Transforms** with dbt following the Medallion architecture (Bronze → Silver → Gold)
 4. **Orchestrates** the full pipeline with Apache Airflow (4 DAGs, daily schedule)
-5. **Validates** data quality with dbt tests (71) and Great Expectations (9 expectations, CI)
-6. **Provisions** all infrastructure with Terraform (IaC)
+5. **Validates** data quality with dbt tests (95) and Great Expectations (9 expectations, CI)
+6. **Provisions** all infrastructure with Terraform (IaC) — 5 prod datasets + 4 dev datasets
 7. **Exposes** KPIs in a Looker Studio dashboard
 
 Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data (~2.3M rows) into BigQuery, giving the dashboard meaningful multi-year trends from day one.
@@ -99,7 +100,7 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
                       ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │              SILVER — Staging Layer                              │
-│                BigQuery: transport_staging                       │
+│            BigQuery: transport_staging_staging                   │
 │      stg_validations · stg_punctuality · stg_ref_stops/lines     │
 └─────────────────────┬────────────────────────────────────────────┘
                       │ dbt core + marts models
@@ -110,7 +111,7 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
 │   dim_stop · dim_line · dim_date · dim_ticket_type               │
 │   fct_validations_daily (partitioned by date · clustered)        │
 │   fct_punctuality_monthly · mart_network_scorecard_monthly       │
-│   fct_data_health_daily · metrics_* · all_metrics                │
+│   fct_data_health_daily (SLA monitoring) · metrics_* · all_metrics│
 └─────────────────────┬────────────────────────────────────────────┘
                       │
          ┌────────────┴────────────┐
@@ -146,7 +147,7 @@ The pipeline runs at **2 AM daily** to ensure previous day's data is available. 
 |--------|--------|--------|---------|
 | `extract_validations.py` | IDFM Validations API | ~15k records/day | Paginated GET, date filter |
 | `extract_punctuality.py` | Transilien Punctuality API | 156 records/month | Full monthly extract |
-| `extract_ref_stops.py` | IDFM Stops API | ~10k stops | Full refresh weekly |
+| `extract_ref_stops.py` | IDFM Stops API | ~73k records | Full refresh weekly |
 | `extract_ref_lines.py` | IDFM Lines API | ~2100 lines | Full refresh weekly |
 | `load_bigquery_raw.py` | Local JSON | All above | WRITE_TRUNCATE → RAW |
 
@@ -183,9 +184,9 @@ Tasks: `dbt_deps` → `dbt_run_staging` → `dbt_run_core` → `dbt_run_marts` �
 
 ### Error Handling
 - **Retries**: 3 attempts with 5-min delay
-- **Timeout**: 2h max per run
+- **Timeout**: 4h max per run (`extract_referentials` fetches ~73k records)
 - **Alerting**: Slack webhook on failure (graceful skip if unconfigured)
-- **Monitoring**: `fct_data_health_daily` tracks freshness and row counts per table
+- **Monitoring**: `fct_data_health_daily` tracks freshness and SLA compliance per table
 
 ---
 
@@ -230,13 +231,16 @@ python ingestion/backfill/run_backfill.py --period 2024-T4 --force
 
 ### BigQuery Datasets
 
-| Dataset | Layer | Content |
-|---------|-------|---------|
-| `transport_raw` | Bronze | Raw data from APIs and backfill |
-| `transport_staging` | Silver | Cleaned, typed, renamed |
-| `transport_staging_core` | Gold | Dimensions + Facts |
-| `transport_staging_analytics` | Gold | Marts + Metrics |
-| `transport_snapshots` | — | SCD Type 2 historization |
+| Dataset | Layer | Environment | Content |
+|---------|-------|-------------|---------|
+| `transport_raw` | Bronze | Prod | Raw data from APIs and backfill |
+| `transport_staging_staging` | Silver | Prod | Cleaned, typed, renamed views |
+| `transport_staging_core` | Gold | Prod | Dimensions + Facts (Airflow writes here) |
+| `transport_staging_analytics` | Gold | Prod | Marts + Metrics (Looker Studio source) |
+| `transport_snapshots` | — | Prod | SCD Type 2 historization |
+| `transport_staging_dev_*` | All layers | Dev | Local development only — see Dev/Prod section |
+
+All datasets are provisioned and managed by Terraform (`terraform/bigquery.tf`).
 
 ### 17 dbt Models
 
@@ -244,7 +248,7 @@ python ingestion/backfill/run_backfill.py --period 2024-T4 --force
 warehouse/dbt/models/
 │
 ├── staging/                              # SILVER — 1:1 with source tables
-│   ├── stg_validations_rail_daily.sql    # Clean + normalize raw validations
+│   ├── stg_validations_rail_daily.sql    # Clean + normalize raw validations (incl. stop_name)
 │   ├── stg_punctuality_monthly.sql       # Clean + normalize punctuality
 │   ├── stg_ref_stops.sql                 # Normalize stop reference
 │   ├── stg_ref_lines.sql                 # Normalize line reference
@@ -256,12 +260,13 @@ warehouse/dbt/models/
 │   ├── dim_date.sql                      # Date dimension
 │   ├── dim_ticket_type.sql               # Ticket category dimension
 │   ├── fct_validations_daily.sql         # ★ Main fact table — incremental
+│   │                                     #   4.1M rows · stop_name included
 │   │                                     #   partitioned by validation_date (DAY)
 │   │                                     #   clustered by stop_id, ticket_type
 │   └── fct_punctuality_monthly.sql       # Punctuality fact — incremental
 │
 └── marts/                                # GOLD — Pre-computed analytics
-    ├── fct_data_health_daily.sql         # Data quality monitoring
+    ├── fct_data_health_daily.sql         # SLA monitoring (5 SLA columns)
     ├── mart_network_scorecard_monthly.sql # Executive KPI scorecard
     ├── metrics_fct_validations_daily.sql
     ├── metrics_fct_punctuality_monthly.sql
@@ -291,66 +296,42 @@ warehouse/dbt/snapshots/
 This directly optimizes the most common query patterns:
 - Date-range filters (`WHERE validation_date BETWEEN ...`) skip irrelevant partitions entirely
 - Aggregations by station or ticket category (`GROUP BY stop_id`) benefit from clustering
-- At 3.6M+ rows, this reduces bytes scanned and dashboard query costs significantly
+- At 4.1M+ rows, this reduces bytes scanned and dashboard query costs significantly
 
 ### dbt Test Results
 
 ```
-✅ 71 PASS   ⚠️ 5 WARN   ❌ 0 ERROR
+✅ 95 PASS   ⚠️ 3 WARN   ❌ 0 ERROR
 ```
 
 | Test Type | Severity | Examples |
 |-----------|----------|---------|
-| `not_null` | ERROR | IDs, dates, counts |
+| `not_null` | ERROR | IDs, dates, counts, stop_name |
 | `unique` | WARN | Primary keys (known source duplicates) |
-| `accepted_values` | ERROR | Ticket categories, risk levels |
+| `accepted_values` | ERROR | Ticket categories, risk levels, SLA labels |
 | `relationships` | WARN | Orphan FKs — line codes misaligned at source |
 | `assert_positive_values` | ERROR | `validation_count > 0` (custom macro) |
 | `assert_valid_date_range` | ERROR | `date >= 2020-01-01` (custom macro) |
 
-> The 5 warnings are **source data quality issues** — line codes in validations don't always match the reference dataset. `severity: warn` monitors without blocking the pipeline.
+> The 3 warnings are **source data quality issues** — line codes in validations don't always match the reference dataset, and punctuality keys have known duplicates at source. `severity: warn` monitors without blocking the pipeline.
 
-### dbt — Key Implementation Details
+### SLA Monitoring — `fct_data_health_daily`
 
-**Model Lineage**
-```
-raw_validations (Bronze)
-    └── stg_validations_rail_daily     # clean, type, rename
-            └── fct_validations_daily  # incremental fact (partitioned)
-                    ├── mart_network_scorecard_monthly
-                    ├── metrics_fct_validations_daily
-                    └── all_metrics
+The monitoring table tracks 5 SLA dimensions per pipeline table per day:
 
-raw_ref_stops + raw_ref_lines (Bronze)
-    ├── stg_ref_stops └── dim_stop
-    └── stg_ref_lines └── dim_line
-
-raw_punctuality (Bronze)
-    └── stg_punctuality_monthly
-            └── fct_punctuality_monthly  # incremental fact
-                    └── metrics_fct_punctuality_monthly
-```
-
-**Custom Generic Tests (macros/)**
-
-`test_assert_positive_values` — ensures `validation_count > 0`. Catches upstream ingestion bugs where counts come in as 0 or negative, which would silently corrupt aggregations.
-
-`test_assert_valid_date_range` — ensures `date >= 2020-01-01`. Catches encoding bugs in the multi-format CSV parser (e.g. 2-digit year misparse producing dates in 1924).
-
-**Incremental Strategy on `fct_validations_daily`**
-```sql
--- Only process new dates not already in the table
-{% if is_incremental() %}
-  WHERE validation_date > (SELECT MAX(validation_date) FROM {{ this }})
-{% endif %}
-```
-This means daily runs process ~15k rows instead of re-scanning 4M+ rows — direct cost and performance optimization.
+| Column | Description |
+|--------|-------------|
+| `sla_met` | Boolean — did the table meet its freshness SLA? |
+| `sla_numeric` | INT (1=met, 0=breached) — for Looker Studio numeric filters |
+| `sla_status_label` | OK / WARNING / CRITICAL |
+| `freshness_delta` | `freshness_hours - sla_hours` — how far above/below SLA |
+| `freshness_ratio` | `freshness_hours / sla_hours` — normalized SLA score |
 
 ---
 
 ## 🧪 Data Quality & Testing
 
-### 1. dbt Tests (71 tests)
+### 1. dbt Tests (95 tests)
 Run at every `dbt build`. Blocking (ERROR) on critical issues, non-blocking (WARN) on known source anomalies. Custom generic tests in `macros/`: `test_assert_positive_values.sql`, `test_assert_valid_date_range.sql`.
 
 ### 2. Great Expectations (CI-integrated)
@@ -388,6 +369,8 @@ Push / PR → GitHub Actions
 | `data-quality.yml` | push, PR | Great Expectations on raw_validations |
 | `dbt-docs.yml` | push to main | dbt docs generate → GitHub Pages |
 
+> **Note**: Workflows currently run dbt in dry-run mode (no real BigQuery connection in CI). Workload Identity Federation (WIF) configuration is planned to enable real BigQuery validation in CI.
+
 dbt documentation with full lineage DAG: https://elliepsc.github.io/idfm-analytics-dataops
 
 ---
@@ -396,7 +379,7 @@ dbt documentation with full lineage DAG: https://elliepsc.github.io/idfm-analyti
 
 > 🔗 **[Looker Studio Dashboard](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)**
 
-4-page interactive dashboard built on BigQuery Gold layer tables.
+4-page interactive dashboard built on BigQuery Gold layer tables. All sources point to `transport_staging_core` and `transport_staging_analytics`.
 
 | Page | Title | Key questions answered |
 |------|-------|----------------------|
@@ -405,7 +388,7 @@ dbt documentation with full lineage DAG: https://elliepsc.github.io/idfm-analyti
 | **3** | Punctuality Analysis | Which Transilien lines are chronically late? Has punctuality improved over 2024? |
 | **4** | Data Health — SLA Pipeline | Are all pipeline tables fresh and meeting SLA targets? |
 
-Sources: `fct_validations_daily` (4.1M rows, 2023–2025) · `fct_punctuality_monthly` (12 Transilien lines, 2024) · `fct_data_health_daily`
+Sources: `fct_validations_daily` (4.1M rows, 2023–2025, incl. `stop_name`) · `fct_punctuality_monthly` (12 Transilien lines, 2024) · `fct_data_health_daily`
 
 ## Dashboard
 
@@ -450,13 +433,48 @@ chmod o+r ~/.config/gcloud/application_default_credentials.json
 
 ### 4. Provision infrastructure
 
+BigQuery datasets are managed by Terraform. If this is a fresh clone with no existing datasets:
+
 ```bash
 cd terraform
-terraform init && terraform apply
+terraform init
+terraform apply
 cd ..
 ```
 
-### 5. Start Airflow
+If datasets already exist in your BigQuery project (e.g. you previously ran the pipeline), import them into Terraform state before applying:
+
+```bash
+cd terraform
+terraform init
+
+# Import existing datasets into Terraform state
+terraform import google_bigquery_dataset.transport_raw YOUR_PROJECT_ID/transport_raw
+terraform import google_bigquery_dataset.transport_snapshots YOUR_PROJECT_ID/transport_snapshots
+terraform import google_bigquery_dataset.transport_staging_staging YOUR_PROJECT_ID/transport_staging_staging
+terraform import google_bigquery_dataset.transport_staging_core YOUR_PROJECT_ID/transport_staging_core
+terraform import google_bigquery_dataset.transport_staging_analytics YOUR_PROJECT_ID/transport_staging_analytics
+
+# Then apply to sync labels and descriptions
+terraform apply
+cd ..
+```
+
+### 5. Load environment variables
+
+The project uses a `.env` file for all configuration. An alias is available to load it:
+
+```bash
+# Add to ~/.bashrc for persistent use across sessions:
+alias load-idfm-env='set -a && source /path/to/idfm-analytics-dataops/.env && set +a'
+
+# Then load:
+load-idfm-env
+```
+
+> `set -a` automatically exports all variables defined in `.env` as environment variables. `set +a` restores normal behaviour after loading.
+
+### 6. Start Airflow
 
 ```bash
 cd orchestration/airflow
@@ -464,7 +482,7 @@ docker compose up -d
 # UI: http://localhost:8081  (admin / admin)
 ```
 
-### 6. Run historical backfill
+### 7. Run historical backfill
 
 ```bash
 source venv/bin/activate
@@ -478,17 +496,60 @@ python ingestion/backfill/run_backfill.py --base-dir "/path/to/downloads"
 
 > T4 2024 is archived in a public GCS bucket and downloaded automatically.
 
-### 7. Run dbt
+### 8. Run dbt
 
 ```bash
 cd warehouse/dbt
+load-idfm-env
 dbt deps
 dbt build --target prod
 ```
 
-### 8. Trigger the pipeline
+### 9. Trigger the pipeline
 
 Enable and trigger `transport_daily_pipeline` in the Airflow UI (http://localhost:8081).
+
+---
+
+## 🔀 Dev vs Prod Environments
+
+This project separates development (local WSL) and production (Airflow DAGs) using dbt targets and distinct BigQuery dataset namespaces.
+
+### Dataset naming convention
+
+| Environment | Base dataset | Example dbt output |
+|-------------|-------------|-------------------|
+| **Prod** | `transport_staging` | `transport_staging_core`, `transport_staging_analytics` |
+| **Dev** | `transport_staging_dev` | `transport_staging_dev_core`, `transport_staging_dev_analytics` |
+
+### profiles.yml
+
+```yaml
+transport:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: transport_staging_dev   # writes to transport_staging_dev_*
+      threads: 4
+      location: europe-west1
+
+    prod:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}"
+      location: europe-west1
+      threads: 8
+```
+
+### Key rules
+
+- **Never run `dbt --target prod` from WSL** for full-refresh operations — always use the Airflow container to ensure writes go to the correct prod datasets.
+- **Full-refresh from the Airflow container**: `make dbt-refresh-prod MODEL=model_name`
+- **GCP authentication**: always ADC (`gcloud auth application-default login`) — never JSON service account keys.
 
 ---
 
@@ -519,6 +580,7 @@ idfm-analytics-dataops/
 │       ├── snapshots/                 # SCD Type 2 (stops, lines)
 │       ├── macros/                    # Custom generic tests
 │       ├── seeds/                     # ticket_type_mapping.csv
+│       ├── profiles.yml               # Dev/prod targets
 │       └── dbt_project.yml
 │
 ├── orchestration/
@@ -533,7 +595,8 @@ idfm-analytics-dataops/
 │
 ├── terraform/                         # Infrastructure as Code
 │   ├── main.tf                        # GCP provider config
-│   ├── bigquery.tf                    # All BigQuery datasets
+│   ├── bigquery.tf                    # 9 BigQuery datasets (5 prod + 4 dev)
+│   ├── outputs.tf                     # Dataset ID outputs
 │   └── variables.tf                   # Project ID, location, labels
 │
 ├── tests/
@@ -564,7 +627,7 @@ Dependency graph visibility, automatic retry with backoff, date-range backfill, 
 Native analytical SQL, serverless scaling, and a coherent GCP ecosystem. Free tier covers this project entirely.
 
 **Why partition + cluster `fct_validations_daily`?**
-At 3.6M+ rows, partitioning by `validation_date` (DAY) eliminates irrelevant partitions on date-range queries. Clustering by `stop_id, ticket_type` reduces bytes scanned for the most common aggregation patterns — directly improving dashboard performance and cost.
+At 4.1M+ rows, partitioning by `validation_date` (DAY) eliminates irrelevant partitions on date-range queries. Clustering by `stop_id, ticket_type` reduces bytes scanned for the most common aggregation patterns — directly improving dashboard performance and cost.
 
 **Why ADC over a service account key?**
 More secure (no JSON file to store), GCP-recommended, and key creation was blocked by the org policy anyway.
@@ -577,6 +640,12 @@ The original IDFM URL is a rolling dataset now serving 2025 data. The GCS archiv
 
 **Why `severity: warn` on relationship tests?**
 Line codes in validations don't match the reference dataset at source. Blocking on a source issue would be counterproductive — `warn` monitors without blocking.
+
+**Why separate prod and dev datasets in BigQuery?**
+Prevents accidental writes to production tables during local development. The dev datasets (`transport_staging_dev_*`) are identical in structure to prod but isolated — dbt `--target dev` writes there, Airflow always uses `--target prod`.
+
+**Why Terraform import instead of recreate?**
+BigQuery datasets created outside of Terraform (by dbt or manually) already contain data. Deleting and recreating them would lose all tables. `terraform import` adopts existing resources into the Terraform state without touching their contents.
 
 ---
 
