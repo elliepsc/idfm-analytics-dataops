@@ -4,8 +4,8 @@ transport:
     dev:
       type: bigquery
       method: oauth
-      project: idfm-analytics-dev-488611
-      dataset: transport_analytics
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: transport_staging_dev
       threads: 4
       timeout_seconds: 300
       location: europe-west1

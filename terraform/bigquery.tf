@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BIGQUERY DATASETS
+# BIGQUERY DATASETS — PROD
 # ─────────────────────────────────────────────────────────────
 
 resource "google_bigquery_dataset" "transport_raw" {
@@ -7,61 +7,76 @@ resource "google_bigquery_dataset" "transport_raw" {
   friendly_name = "Transport Raw"
   description   = "Raw ingestion layer — IDFM raw data (validations, punctuality, reference data)"
   location      = var.location
-
-  labels = {
-    env   = "dev"
-    layer = "raw"
-  }
+  labels = { env = "prod", layer = "raw" }
 }
 
-resource "google_bigquery_dataset" "transport_analytics_staging" {
-  dataset_id    = "transport_analytics_staging"
-  friendly_name = "Transport Analytics - Staging"
+resource "google_bigquery_dataset" "transport_staging_staging" {
+  dataset_id    = "transport_staging_staging"
+  friendly_name = "Transport Staging - Staging"
   description   = "Staging layer — dbt cleaned and normalized views"
   location      = var.location
-
-  labels = {
-    env   = "dev"
-    layer = "staging"
-  }
+  labels = { env = "prod", layer = "staging" }
 }
 
-resource "google_bigquery_dataset" "transport_analytics_core" {
-  dataset_id    = "transport_analytics_core"
-  friendly_name = "Transport Analytics - Core"
+resource "google_bigquery_dataset" "transport_staging_core" {
+  dataset_id    = "transport_staging_core"
+  friendly_name = "Transport Staging - Core"
   description   = "Core layer — dbt dimensions and facts (star schema)"
   location      = var.location
-
-  labels = {
-    env   = "dev"
-    layer = "core"
-  }
+  labels = { env = "prod", layer = "core" }
 }
 
-resource "google_bigquery_dataset" "transport_analytics_analytics" {
-  dataset_id    = "transport_analytics_analytics"
-  friendly_name = "Transport Analytics - Analytics"
+resource "google_bigquery_dataset" "transport_staging_analytics" {
+  dataset_id    = "transport_staging_analytics"
+  friendly_name = "Transport Staging - Analytics"
   description   = "Analytics layer — dbt business marts and monitoring"
   location      = var.location
-
-  labels = {
-    env   = "dev"
-    layer = "analytics"
-  }
+  labels = { env = "prod", layer = "analytics" }
 }
 
 resource "google_bigquery_dataset" "transport_snapshots" {
   dataset_id    = "transport_snapshots"
   friendly_name = "Transport Snapshots"
-  description   = "SCD Type 2 snapshots — historical tracking of lines and stops reference data"
+  description   = "SCD Type 2 snapshots — historical tracking of lines and stops"
   location      = var.location
-
-  labels = {
-    env   = "dev"
-    layer = "snapshots"
-  }
+  labels = { env = "prod", layer = "snapshots" }
 }
 
+# ─────────────────────────────────────────────────────────────
+# BIGQUERY DATASETS — DEV (local development only)
+# ─────────────────────────────────────────────────────────────
+
+resource "google_bigquery_dataset" "transport_staging_dev_staging" {
+  dataset_id    = "transport_staging_dev_staging"
+  friendly_name = "Transport Dev - Staging"
+  description   = "Dev staging layer — local dbt development"
+  location      = var.location
+  labels = { env = "dev", layer = "staging" }
+}
+
+resource "google_bigquery_dataset" "transport_staging_dev_core" {
+  dataset_id    = "transport_staging_dev_core"
+  friendly_name = "Transport Dev - Core"
+  description   = "Dev core layer — local dbt development"
+  location      = var.location
+  labels = { env = "dev", layer = "core" }
+}
+
+resource "google_bigquery_dataset" "transport_staging_dev_analytics" {
+  dataset_id    = "transport_staging_dev_analytics"
+  friendly_name = "Transport Dev - Analytics"
+  description   = "Dev analytics layer — local dbt development"
+  location      = var.location
+  labels = { env = "dev", layer = "analytics" }
+}
+
+resource "google_bigquery_dataset" "transport_staging_dev_snapshots" {
+  dataset_id    = "transport_staging_dev_snapshots"
+  friendly_name = "Transport Dev - Snapshots"
+  description   = "Dev snapshots layer — local dbt development"
+  location      = var.location
+  labels = { env = "dev", layer = "snapshots" }
+}
 
 # ─────────────────────────────────────────────────────────────
 # NOTE: BigQuery tables are NOT managed by Terraform
@@ -72,22 +87,14 @@ resource "google_bigquery_dataset" "transport_snapshots" {
 #   Terraform → Infrastructure (datasets, IAM, GCP project)
 #   dbt       → Tables, views, schemas, tests, documentation
 #
-# Benefits:
-#   - dbt owns the full table lifecycle (CREATE, ALTER, partitioning,
-#     clustering, incremental logic)
-#   - Avoids state conflicts between Terraform and dbt
-#   - Schemas are documented in schema.yml (single source of truth)
+# Active datasets managed by Terraform:
+#   PROD : transport_raw, transport_staging_staging,
+#          transport_staging_core, transport_staging_analytics,
+#          transport_snapshots
+#   DEV  : transport_staging_dev_staging, transport_staging_dev_core,
+#          transport_staging_dev_analytics, transport_staging_dev_snapshots
 #
-# Active tables managed by dbt:
-#   transport_raw                : raw_validations, raw_punctuality,
-#                                  raw_ref_stops, raw_ref_lines
-#   transport_analytics_core     : fct_validations_daily (partitioned DAY,
-#                                  clustered stop_id/ticket_type),
-#                                  fct_punctuality_monthly (partitioned MONTH,
-#                                  clustered line_id), dim_stop, dim_line,
-#                                  dim_ticket_type, dim_date
-#   transport_analytics_staging  : stg_* views
-#   transport_analytics_analytics: mart_network_scorecard_monthly,
-#                                  fct_data_health_daily, metrics_*
-#   transport_snapshots          : snap_ref_lines, snap_ref_stops (SCD2)
+# Deprecated datasets (to delete manually in BQ Console):
+#   transport_analytics_staging, transport_analytics_core,
+#   transport_analytics_analytics
 # ─────────────────────────────────────────────────────────────
