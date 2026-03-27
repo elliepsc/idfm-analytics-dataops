@@ -128,6 +128,9 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
 | **Silver (Staging)** | Cleaning, typing, column renaming | Source changes don't cascade to analytics |
 | **Gold (Marts)** | Business aggregations, KPIs, metrics | BI-ready, pre-computed, fully tested |
 
+
+
+
 ---
 
 ## 🔄 Data Pipeline
@@ -611,6 +614,115 @@ idfm-analytics-dataops/
 ├── Makefile                           # Developer commands (make help)
 ├── .env.example
 └── README.md
+```
+
+
+
+### Mermaid architecture diagram
+```mermaid
+flowchart TD
+    %% Sources
+    API1([IDFM Validations API\n~15k records/day])
+    API2([IDFM Punctuality API\n156 records/month])
+    API3([IDFM Referentials API\n~73k stops & lines])
+    BKF([Historical Backfill\n2023-2025 · ~2.3M rows])
+
+    %% Ingestion
+    subgraph INGESTION["🐍 Python Ingestion Layer"]
+        EV[extract_validations.py]
+        EP[extract_punctuality.py]
+        ER[extract_ref_stops/lines.py]
+        LBQ[load_bigquery_raw.py]
+    end
+
+    %% Orchestration
+    subgraph AIRFLOW["⚙️ Apache Airflow 2.10 — 4 DAGs"]
+        DAG1[transport_daily_pipeline\ndaily @ 2AM]
+        DAG2[dbt_daily\ndaily @ 3AM]
+        DAG3[transport_backfill\nmanual trigger]
+        DAG4[transport_monitoring\ndaily @ 7AM]
+    end
+
+    %% Bronze
+    subgraph BRONZE["🥉 BRONZE — transport_raw"]
+        RV[(raw_validations)]
+        RP[(raw_punctuality)]
+        RR[(raw_ref_stops\nraw_ref_lines)]
+    end
+
+    %% Silver
+    subgraph SILVER["🥈 SILVER — transport_staging_staging"]
+        SV[stg_validations_rail_daily]
+        SP[stg_punctuality_monthly]
+        SR[stg_ref_stops\nstg_ref_lines]
+    end
+
+    %% Gold Core
+    subgraph CORE["🥇 GOLD CORE — transport_staging_core"]
+        DS[(dim_stop\n8.7k stops)]
+        DL[(dim_line\n2.1k lines)]
+        DD[(dim_date)]
+        DT[(dim_ticket_type)]
+        FV[(fct_validations_daily\n4.1M rows\npartitioned · clustered)]
+        FP[(fct_punctuality_monthly)]
+        SN[(snap_ref_stops\nsnap_ref_lines\nSCD Type 2)]
+    end
+
+    %% Gold Analytics
+    subgraph ANALYTICS["🥇 GOLD ANALYTICS — transport_staging_analytics"]
+        MN[(mart_network_scorecard_monthly)]
+        FH[(fct_data_health_daily\nSLA monitoring)]
+        MT[(metrics_*\nall_metrics)]
+    end
+
+    %% IaC & CI
+    subgraph INFRA["🔧 Infrastructure & CI/CD"]
+        TF[Terraform\n9 BQ datasets]
+        GH[GitHub Actions\nCI · GE · dbt docs]
+        GE[Great Expectations\n9 expectations]
+    end
+
+    %% Outputs
+    LS([📊 Looker Studio\n4-page dashboard])
+    DD2([📚 dbt Docs\nGitHub Pages])
+    SL([🔔 Slack Alerts\nSLA & failures])
+
+    %% Flow
+    API1 --> EV
+    API2 --> EP
+    API3 --> ER
+    BKF --> LBQ
+
+    EV --> LBQ
+    EP --> LBQ
+    ER --> LBQ
+
+    DAG1 --> INGESTION
+    LBQ --> RV & RP & RR
+
+    RV --> SV
+    RP --> SP
+    RR --> SR
+
+    SV --> FV
+    SP --> FP
+    SR --> DS & DL
+
+    DS & DL & DD & DT --> FV
+    FV --> MN & MT
+    FP --> MN
+    MN & FV & FP --> FH
+
+    ANALYTICS --> LS
+    CORE --> LS
+    FH --> SL
+    MN --> LS
+    FH --> LS
+    DAG4 --> FH
+
+    TF -.->|provisions| BRONZE & SILVER & CORE & ANALYTICS
+    GH -.->|validates| GE
+    GH -.->|publishes| DD2
 ```
 
 ---
