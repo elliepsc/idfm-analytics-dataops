@@ -53,7 +53,7 @@ vars:
 
 seeds:
   transport_scorecard:
-    +schema: transport_raw
+    +schema: raw
     ticket_type_mapping:
       +column_types:
         ticket_type_code: string
