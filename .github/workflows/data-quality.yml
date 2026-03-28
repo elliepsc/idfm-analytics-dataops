@@ -1,11 +1,3 @@
-# Data Quality CI - locale version (without credentials GCP)
-# ═══════════════════════════════════════════════════════════════
-# V4 TODO: Activate real dbt tests on BigQuery with Workload Identity Federation (WIF)
-# - Uncomment the sections marked [V4-GCP]
-# - Configure WIF on GCP Console
-# - Add secrets: GCP_PROJECT_ID, WIF_PROVIDER, WIF_SERVICE_ACCOUNT
-# ═══════════════════════════════════════════════════════════════
-
 name: Data Quality
 
 on:
@@ -23,6 +15,10 @@ on:
 jobs:
   dbt-quality:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for WIF
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,27 +42,24 @@ jobs:
           cd warehouse/dbt
           GCP_PROJECT_ID=dummy-project dbt parse --profiles-dir /tmp --profile transport_ci --target ci
 
-      - name: dbt compile
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: dbt build — monitoring models (prod)
         run: |
           cd warehouse/dbt
-          GCP_PROJECT_ID=dummy-project dbt compile --profiles-dir /tmp --profile transport_ci --target ci
-        continue-on-error: true
-
-      # [V4-GCP] uncomment to run real dbt tests on BigQuery with Workload Identity Federation (WIF)
-      # - name: Authenticate to GCP (WIF)
-      #   uses: google-github-actions/auth@v2
-      #   with:
-      #     workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-      #     service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      #
-      # - name: dbt build monitoring models
-      #   run: |
-      #     cd warehouse/dbt
-      #     GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-      #     dbt build --target prod --select marts.monitoring
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+          dbt build --target prod --select marts.monitoring
 
   data-quality-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for WIF
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -84,15 +77,22 @@ jobs:
 
       - name: Check SLA script syntax
         run: python3 -m py_compile scripts/check_sla.py && echo "✅ SLA script OK"
+
       - name: Great Expectations — validate data quality
         run: |
           python3 scripts/create_test_data.py
           python3 scripts/validate_data_quality.py
 
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      # [V4-GCP] Uncomment to run SLA compliance checks with real data on BigQuery
-      # - name: Check SLA compliance
-      #   run: python scripts/check_sla.py
+      - name: Check SLA compliance (prod BigQuery)
+        run: |
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+          python scripts/check_sla.py
 
   security-scan:
     runs-on: ubuntu-latest
