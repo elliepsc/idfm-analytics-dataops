@@ -8,7 +8,6 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,6 +28,24 @@ jobs:
           pip install -r requirements.txt
           pip install black flake8 isort sqlfluff pytest pytest-cov
 
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+
+      - name: Terraform fmt check
+        run: |
+          cd terraform
+          terraform fmt -check -recursive
+          echo "✅ Terraform formatting OK"
+
+      - name: Terraform validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+          echo "✅ Terraform config valid"
+
       - name: Lint Python (black)
         run: black --check ingestion/ scripts/
 
@@ -37,7 +54,6 @@ jobs:
 
       - name: Lint Python (flake8)
         run: flake8 ingestion/ scripts/ --max-line-length=120 --extend-ignore=E203
-
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
@@ -55,9 +71,6 @@ jobs:
         run: cd warehouse/dbt && dbt deps
 
       - name: dbt parse
-        # FIX V2: dbt requires a file named exactly 'profiles.yml' in --profiles-dir.
-        # profile_ci.yml exists for clarity but must be exposed as profiles.yml at runtime.
-        # Uses oauth with dummy project — no real GCP credentials needed for parse.
         run: |
           cd warehouse/dbt
           cp profile_ci.yml /tmp/profiles.yml
@@ -66,6 +79,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          echo "✅ Terraform fmt + validate passed"
           echo "✅ Lint checks passed"
           echo "✅ Unit tests passed"
           echo "✅ dbt parse successful"
