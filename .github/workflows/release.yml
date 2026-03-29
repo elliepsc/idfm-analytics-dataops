@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+
+      - name: Terraform fmt check
+        run: |
+          cd terraform
+          terraform fmt -check -recursive
+          echo "✅ Terraform formatting OK"
+
+      - name: Terraform validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+          echo "✅ Terraform config valid"
+
+      - name: Extract release notes from tag
+        id: notes
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.notes.outputs.tag }}
+          name: "Release ${{ steps.notes.outputs.tag }}"
+          body: |
+            ## IDFM Analytics DataOps — ${{ steps.notes.outputs.tag }}
+
+            ### Stack
+            - **Orchestration**: Apache Airflow 2.10 — 4 DAGs production
+            - **Transformation**: dbt-bigquery 1.8.7 — 95 tests, star schema Kimball
+            - **Warehouse**: BigQuery GCP — 4.1M rows, partitioning + clustering
+            - **IaC**: Terraform 1.5+ — 5 datasets BigQuery
+            - **CI/CD**: GitHub Actions + Workload Identity Federation
+            - **Quality**: Great Expectations v1.14 — 9 expectations
+
+            ### What's included
+            See [QUICKSTART.md](QUICKSTART.md) to run locally.
+            See [dbt docs](https://elliepsc.github.io/idfm-analytics-dataops/) for data lineage.
+
+          draft: false
+          prerelease: false
