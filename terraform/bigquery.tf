@@ -7,7 +7,7 @@ resource "google_bigquery_dataset" "transport_raw" {
   friendly_name = "Transport Raw"
   description   = "Raw ingestion layer — IDFM raw data (validations, punctuality, reference data)"
   location      = var.location
-  labels = { env = "prod", layer = "raw" }
+  labels        = { env = "prod", layer = "raw" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_staging" {
@@ -15,7 +15,7 @@ resource "google_bigquery_dataset" "transport_staging_staging" {
   friendly_name = "Transport Staging - Staging"
   description   = "Staging layer — dbt cleaned and normalized views"
   location      = var.location
-  labels = { env = "prod", layer = "staging" }
+  labels        = { env = "prod", layer = "staging" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_core" {
@@ -23,7 +23,7 @@ resource "google_bigquery_dataset" "transport_staging_core" {
   friendly_name = "Transport Staging - Core"
   description   = "Core layer — dbt dimensions and facts (star schema)"
   location      = var.location
-  labels = { env = "prod", layer = "core" }
+  labels        = { env = "prod", layer = "core" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_analytics" {
@@ -31,7 +31,7 @@ resource "google_bigquery_dataset" "transport_staging_analytics" {
   friendly_name = "Transport Staging - Analytics"
   description   = "Analytics layer — dbt business marts and monitoring"
   location      = var.location
-  labels = { env = "prod", layer = "analytics" }
+  labels        = { env = "prod", layer = "analytics" }
 }
 
 resource "google_bigquery_dataset" "transport_snapshots" {
@@ -39,7 +39,7 @@ resource "google_bigquery_dataset" "transport_snapshots" {
   friendly_name = "Transport Snapshots"
   description   = "SCD Type 2 snapshots — historical tracking of lines and stops"
   location      = var.location
-  labels = { env = "prod", layer = "snapshots" }
+  labels        = { env = "prod", layer = "snapshots" }
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ resource "google_bigquery_dataset" "transport_staging_dev_staging" {
   friendly_name = "Transport Dev - Staging"
   description   = "Dev staging layer — local dbt development"
   location      = var.location
-  labels = { env = "dev", layer = "staging" }
+  labels        = { env = "dev", layer = "staging" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_dev_core" {
@@ -59,7 +59,7 @@ resource "google_bigquery_dataset" "transport_staging_dev_core" {
   friendly_name = "Transport Dev - Core"
   description   = "Dev core layer — local dbt development"
   location      = var.location
-  labels = { env = "dev", layer = "core" }
+  labels        = { env = "dev", layer = "core" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_dev_analytics" {
@@ -67,7 +67,7 @@ resource "google_bigquery_dataset" "transport_staging_dev_analytics" {
   friendly_name = "Transport Dev - Analytics"
   description   = "Dev analytics layer — local dbt development"
   location      = var.location
-  labels = { env = "dev", layer = "analytics" }
+  labels        = { env = "dev", layer = "analytics" }
 }
 
 resource "google_bigquery_dataset" "transport_staging_dev_snapshots" {
@@ -75,7 +75,7 @@ resource "google_bigquery_dataset" "transport_staging_dev_snapshots" {
   friendly_name = "Transport Dev - Snapshots"
   description   = "Dev snapshots layer — local dbt development"
   location      = var.location
-  labels = { env = "dev", layer = "snapshots" }
+  labels        = { env = "dev", layer = "snapshots" }
 }
 
 # ─────────────────────────────────────────────────────────────
