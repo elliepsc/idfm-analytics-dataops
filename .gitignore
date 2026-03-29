@@ -99,6 +99,7 @@ warehouse/dbt/dbt_internal_packages_data/
 
 # README by section
 .github/workflows/README_CICD.md
+.github/workflows/README_WIF.md
 terraform/README_TERRAFORM.md
 
 
