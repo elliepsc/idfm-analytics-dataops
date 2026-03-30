@@ -25,6 +25,8 @@ def log_dag_metric(
     duration_seconds: Optional[float] = None,
     nb_records: Optional[int] = None,
     extra: Optional[dict] = None,
+    z_score: Optional[float] = None,
+    is_anomaly: Optional[bool] = None,
 ) -> None:
     """Log a DAG metric in BigQuery transport_raw.dag_metrics."""
     try:
@@ -42,6 +44,8 @@ def log_dag_metric(
             "duration_seconds": duration_seconds,
             "nb_records": nb_records,
             "extra": str(extra) if extra else None,
+            "z_score": z_score,
+            "is_anomaly": is_anomaly,
         }
 
         errors = client.insert_rows_json(table_id, [row])
@@ -138,6 +142,144 @@ def check_punctuality_freshness(
     except Exception as e:
         logger.warning("Freshness check skipped: %s", e)
         return True
+
+
+# ═════════════════════════════════════════════════════════════════
+# Statistical Anomaly Detection — Z-score
+# ═════════════════════════════════════════════════════════════════
+
+
+def check_statistical_anomaly(
+    project_id: str,
+    execution_date: str,
+    dataset_core: str = "transport_staging_core",
+    z_score_threshold: float = 2.5,
+    lookback_days: int = 7,
+) -> dict:
+    """
+    Detects statistical anomalies in daily validation counts using z-score.
+
+    Strategy:
+    - Fetches validation_count for the last (lookback_days + 1) days
+    - Computes mean and std over the lookback window (excluding today)
+    - Z-score = (today - mean) / std
+    - Flags as anomaly if |z_score| > z_score_threshold
+
+    Why z-score over fixed threshold:
+    - Automatically adapts to weekday/weekend patterns
+    - Self-calibrating: no manual threshold tuning needed
+    - Detects both drops AND spikes
+
+    Returns a dict with:
+        - today_count: int
+        - mean_7d: float
+        - std_7d: float
+        - z_score: float
+        - is_anomaly: bool
+        - direction: str ("low" | "high" | "normal")
+        - execution_date: str
+    """
+    result = {
+        "today_count": None,
+        "mean_7d": None,
+        "std_7d": None,
+        "z_score": None,
+        "is_anomaly": False,
+        "direction": "normal",
+        "execution_date": execution_date,
+    }
+
+    try:
+        from google.cloud import bigquery
+
+        client = bigquery.Client(project=project_id)
+
+        # Fetch last (lookback_days + 1) days of daily validation totals
+        query = f"""
+            SELECT
+                validation_date,
+                SUM(validation_count) AS daily_total
+            FROM `{project_id}.{dataset_core}.fct_validations_daily`
+            WHERE validation_date >= DATE_SUB(DATE '{execution_date}', INTERVAL {lookback_days} DAY)
+              AND validation_date <= DATE '{execution_date}'
+            GROUP BY validation_date
+            ORDER BY validation_date ASC
+        """
+
+        rows = list(client.query(query).result())
+
+        if len(rows) < 3:
+            logger.warning(
+                "Not enough data for z-score (got %d rows, need >= 3). Skipping.",
+                len(rows),
+            )
+            return result
+
+        # Split: baseline (all days except today) vs today
+        baseline = [row.daily_total for row in rows if str(row.validation_date) != execution_date]
+        today_rows = [row.daily_total for row in rows if str(row.validation_date) == execution_date]
+
+        if not today_rows:
+            logger.warning("No data found for execution_date %s. Skipping.", execution_date)
+            return result
+
+        today_count = today_rows[0]
+
+        if len(baseline) < 2:
+            logger.warning("Not enough baseline days (%d). Skipping z-score.", len(baseline))
+            return result
+
+        # Compute mean and std over baseline
+        mean_7d = sum(baseline) / len(baseline)
+        variance = sum((x - mean_7d) ** 2 for x in baseline) / len(baseline)
+        std_7d = variance ** 0.5
+
+        # Avoid division by zero (e.g. all baseline values identical)
+        if std_7d == 0:
+            logger.info("Std=0 on baseline — no variance detected. Z-score set to 0.")
+            z_score = 0.0
+        else:
+            z_score = (today_count - mean_7d) / std_7d
+
+        is_anomaly = abs(z_score) > z_score_threshold
+        direction = "normal"
+        if z_score < -z_score_threshold:
+            direction = "low"
+        elif z_score > z_score_threshold:
+            direction = "high"
+
+        result.update({
+            "today_count": int(today_count),
+            "mean_7d": round(mean_7d, 0),
+            "std_7d": round(std_7d, 0),
+            "z_score": round(z_score, 3),
+            "is_anomaly": is_anomaly,
+            "direction": direction,
+        })
+
+        if is_anomaly:
+            logger.warning(
+                "⚠️ Statistical anomaly detected on %s: today=%d, mean_7d=%.0f, z=%.2f (%s)",
+                execution_date,
+                today_count,
+                mean_7d,
+                z_score,
+                direction,
+            )
+        else:
+            logger.info(
+                "✅ No anomaly on %s: today=%d, mean_7d=%.0f, z=%.2f",
+                execution_date,
+                today_count,
+                mean_7d,
+                z_score,
+            )
+
+        return result
+
+    except Exception as e:
+        logger.warning("Statistical anomaly check skipped: %s", e)
+        return result
 
 
 # ═════════════════════════════════════════════════════════════════

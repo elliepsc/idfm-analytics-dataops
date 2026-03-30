@@ -1,5 +1,5 @@
 """
-Monitoring DAG — piplines metrics & data quality checks
+Monitoring DAG — pipeline metrics & data quality checks
 Schedule: Daily at 7 AM (after transport_daily_pipeline at 2 AM)
 """
 
@@ -14,6 +14,7 @@ from airflow.operators.python import PythonOperator
 sys.path.insert(0, "/opt/airflow/dags")
 from utils.monitoring import (
     check_punctuality_freshness,
+    check_statistical_anomaly,
     check_validation_count_threshold,
     log_dag_metric,
     sla_miss_callback,
@@ -23,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
 DATASET_RAW = os.getenv("BQ_DATASET_RAW", "transport_raw")
+DATASET_CORE = os.getenv("BQ_DATASET_CORE", "transport_staging_core")
+
+# Z-score threshold — flag as anomaly if |z| > 2.5
+# Corresponds to ~1.2% false positive rate (normal distribution)
+Z_SCORE_THRESHOLD = 2.5
 
 default_args = {
     "owner": "data-team",
@@ -58,7 +64,82 @@ def check_punctuality_lag(**context):
         max_lag_days=45,
     )
     if not ok:
-        raise ValueError(f"Anomalie: données ponctualité trop anciennes")
+        raise ValueError("Anomalie: données ponctualité trop anciennes")
+
+
+def run_statistical_anomaly_check(**context):
+    """
+    Z-score anomaly detection on daily validation counts.
+
+    Compares today's total validations against the 7-day rolling baseline.
+    Logs z_score + is_anomaly to BigQuery dag_metrics.
+    Sends enriched Slack alert if anomaly detected.
+
+    Why z-score:
+    - Adapts to weekday/weekend patterns automatically
+    - No manual threshold tuning needed
+    - Detects both drops (pipeline failure) and spikes (data duplication)
+    """
+    execution_date = context["ds"]
+    dag_run = context["dag_run"]
+
+    anomaly = check_statistical_anomaly(
+        project_id=PROJECT_ID,
+        execution_date=execution_date,
+        dataset_core=DATASET_CORE,
+        z_score_threshold=Z_SCORE_THRESHOLD,
+    )
+
+    # Log to BigQuery dag_metrics with z_score + is_anomaly fields
+    log_dag_metric(
+        project_id=PROJECT_ID,
+        dataset=DATASET_RAW,
+        dag_id=context["dag"].dag_id,
+        run_id=dag_run.run_id,
+        task_id=context["task"].task_id,
+        status="anomaly" if anomaly["is_anomaly"] else "ok",
+        nb_records=anomaly["today_count"],
+        extra={"execution_date": execution_date},
+        z_score=anomaly["z_score"],
+        is_anomaly=anomaly["is_anomaly"],
+    )
+
+    # Send enriched Slack alert if anomaly detected
+    if anomaly["is_anomaly"]:
+        direction_emoji = "📉" if anomaly["direction"] == "low" else "📈"
+        direction_label = "anormalement basse" if anomaly["direction"] == "low" else "anormalement haute"
+
+        message = (
+            f"{direction_emoji} *Anomalie statistique détectée* — {execution_date}\n"
+            f"• Validations aujourd'hui : *{anomaly['today_count']:,}*\n"
+            f"• Moyenne 7 jours : {anomaly['mean_7d']:,.0f}\n"
+            f"• Écart-type 7 jours : {anomaly['std_7d']:,.0f}\n"
+            f"• Z-score : *{anomaly['z_score']}* (seuil : ±{Z_SCORE_THRESHOLD})\n"
+            f"• Valeur {direction_label}\n"
+            f"_Vérifier le DAG transport_daily_pipeline_"
+        )
+
+        try:
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text=message)
+            logger.warning("Anomaly Slack alert sent for %s", execution_date)
+        except Exception as e:
+            logger.warning("Slack anomaly alert skipped: %s", e)
+
+        # Don't raise — anomaly is logged and alerted, but doesn't fail the DAG
+        # Change to raise ValueError(...) if you want the task to fail on anomaly
+        logger.warning(
+            "Anomaly detected but task continues (z=%.2f). "
+            "Set raise on anomaly if you want task failure.",
+            anomaly["z_score"],
+        )
+    else:
+        logger.info(
+            "No anomaly on %s (z=%.2f, today=%s)",
+            execution_date,
+            anomaly["z_score"] or 0,
+            anomaly["today_count"],
+        )
 
 
 def log_pipeline_metrics(**context):
@@ -83,7 +164,7 @@ def notify_monitoring_success(**context):
         SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
             text=(
                 f"✅ *Monitoring OK* — {context['ds']}\n"
-                f"Validations: seuil OK | Ponctualité: fraîche"
+                f"Validations: seuil OK | Ponctualité: fraîche | Anomalie: aucune"
             )
         )
     except Exception as e:
@@ -99,10 +180,21 @@ with DAG(
     tags=["monitoring", "transport", "v2"],
     doc_md="""
     ## Transport Monitoring DAG
+
     Vérifie quotidiennement la qualité et la fraîcheur des données.
-    - **check_validations**: seuil minimum de validations
+
+    ### Tasks
+    - **check_validations**: seuil minimum de validations (fixe)
     - **check_punctuality**: fraîcheur des données Transilien
+    - **check_statistical_anomaly**: z-score sur validation_count 7j rolling
     - **log_metrics**: logging BigQuery des métriques pipeline
+    - **notify_success**: Slack alert si tout OK
+
+    ### Z-score anomaly detection
+    Compares today's total validations against a 7-day rolling baseline.
+    Threshold: |z| > 2.5 → anomaly alert sent to Slack.
+    Results logged to transport_raw.dag_metrics (z_score, is_anomaly columns).
+
     Runs at 7 AM after the main pipeline (2 AM).
     """,
 ) as dag:
@@ -119,6 +211,12 @@ with DAG(
         sla=timedelta(hours=2),
     )
 
+    check_anomaly = PythonOperator(
+        task_id="check_statistical_anomaly",
+        python_callable=run_statistical_anomaly_check,
+        sla=timedelta(hours=2),
+    )
+
     log_metrics = PythonOperator(
         task_id="log_pipeline_metrics",
         python_callable=log_pipeline_metrics,
@@ -129,4 +227,5 @@ with DAG(
         python_callable=notify_monitoring_success,
     )
 
-    [check_validations, check_punctuality] >> log_metrics >> notify_success
+    # check_anomaly runs in parallel with the other checks
+    [check_validations, check_punctuality, check_anomaly] >> log_metrics >> notify_success

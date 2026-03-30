@@ -98,3 +98,31 @@ resource "google_bigquery_dataset" "transport_staging_dev_snapshots" {
 #   transport_analytics_staging, transport_analytics_core,
 #   transport_analytics_analytics
 # ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# BIGQUERY TABLES — exceptions gérées par Terraform
+# ─────────────────────────────────────────────────────────────
+# La règle générale est : tables gérées par dbt, pas Terraform.
+# Exception : dag_metrics est créée par Terraform car elle est
+# écrite directement par le monitoring_dag (pas par dbt).
+# ─────────────────────────────────────────────────────────────
+
+resource "google_bigquery_table" "dag_metrics" {
+  dataset_id          = google_bigquery_dataset.transport_raw.dataset_id
+  table_id            = "dag_metrics"
+  description         = "DAG execution metrics — monitoring, z-score, anomaly detection"
+  deletion_protection = false
+
+  schema = jsonencode([
+    { name = "ingestion_ts",     type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "dag_id",           type = "STRING",    mode = "NULLABLE" },
+    { name = "run_id",           type = "STRING",    mode = "NULLABLE" },
+    { name = "task_id",          type = "STRING",    mode = "NULLABLE" },
+    { name = "status",           type = "STRING",    mode = "NULLABLE" },
+    { name = "duration_seconds", type = "FLOAT64",   mode = "NULLABLE" },
+    { name = "nb_records",       type = "INTEGER",   mode = "NULLABLE" },
+    { name = "extra",            type = "STRING",    mode = "NULLABLE" },
+    { name = "z_score",          type = "FLOAT64",   mode = "NULLABLE" },
+    { name = "is_anomaly",       type = "BOOL",      mode = "NULLABLE" }
+  ])
+}
