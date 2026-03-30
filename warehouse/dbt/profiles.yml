@@ -19,3 +19,13 @@ transport:
       threads: 8
       timeout_seconds: 600
       priority: interactive
+
+elementary:
+  outputs:
+    default:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}_elementary"
+      threads: 8
+      location: europe-west1

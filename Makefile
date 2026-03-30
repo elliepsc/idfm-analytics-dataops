@@ -132,6 +132,19 @@ check-sla:  ## Check SLA compliance (data health)
 # FULL WORKFLOWS
 # ─────────────────────────────────────────────────────────────
 
+elementary-report:  ## Generate Elementary data observability report
+	set -a && source .env && set +a && \
+	cd warehouse/dbt && \
+	edr report \
+	  --project-dir . \
+	  --profiles-dir . \
+	  --profile-target default \
+	  --project-profile-target prod \
+	  --days-back 30 \
+	  --file-path ../../docs/elementary_report.html \
+	  --open-browser false
+	@echo "✅ Report generated: docs/elementary_report.html"
+
 pipeline-daily: ingest load-raw dbt-build  ## Full daily pipeline
 
 pipeline-backfill:  ## Backfill (requires START_DATE and END_DATE)

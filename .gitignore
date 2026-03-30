@@ -137,3 +137,4 @@ orchestration/airflow/data/bronze/**/*.parquet
 !orchestration/airflow/data/**/.gitkeep
 !orchestration/airflow/data/.gitkeep
 
+docs/elementary_report.html

@@ -2,6 +2,12 @@ name: 'transport_scorecard'
 version: '1.0.0'
 config-version: 2
 
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: false
+
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: false
+
 profile: 'transport'
 
 model-paths: ["models"]
@@ -47,6 +53,10 @@ models:
       monitoring:
         +materialized: table
 
+  elementary:
+    +schema: elementary
+    +materialized: table
+
 vars:
   dev_start_date: '2024-01-01'
   dev_end_date: '2024-12-31'
@@ -60,3 +70,4 @@ seeds:
         ticket_type_label: string
         category: string
         is_navigo: boolean
+

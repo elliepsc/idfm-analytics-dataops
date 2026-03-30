@@ -16,3 +16,8 @@ packages:
     version: 0.10.0
     # Provides: date spine, date parts, fiscal calendar macros
     # Used in: dim_date model
+
+  - package: elementary-data/elementary
+    version: 0.23.0
+    # Provides: data observability tables, test results history, lineage
+    # Creates: elementary schema in BigQuery with run metadata

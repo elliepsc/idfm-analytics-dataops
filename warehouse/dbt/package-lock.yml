@@ -3,4 +3,6 @@ packages:
     version: 1.1.1
   - package: godatadriven/dbt_date
     version: 0.10.0
-sha1_hash: e40a3c66e7c707f73ca7c7fd9739beffc4bd8448
+  - package: elementary-data/elementary
+    version: 0.23.0
+sha1_hash: 319641e2cfc1bae54f1c269f92595a27d59a17aa
