@@ -481,3 +481,40 @@ models:
           - accepted_values:
               values: [1, 2, 3]
               quote: false
+
+  - name: mart_validations_station_daily
+    description: "Daily validations per station with lat/lon coordinates — used for Looker Studio map"
+    columns:
+      - name: validation_date
+        description: "Date of validations"
+        data_tests:
+          - not_null
+      - name: stop_id
+        description: "Unique stop identifier"
+        data_tests:
+          - not_null
+      - name: stop_name
+        description: "Stop name"
+        data_tests:
+          - not_null
+      - name: latitude
+        description: "Stop latitude"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 48.0
+              max_value: 49.5
+      - name: longitude
+        description: "Stop longitude"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1.5
+              max_value: 3.5
+      - name: daily_validation_count
+        description: "Total validations for this stop on this day"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
