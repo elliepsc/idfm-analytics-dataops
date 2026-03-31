@@ -70,3 +70,19 @@ sources:
               # NULL filtering is handled in stg_ref_lines model.
       - name: raw_ref_stop_lines
         description: "Stop to line mapping"
+
+      - name: raw_ref_stations
+        description: "Station reference data from IDFM — emplacement-des-gares-idf dataset"
+        columns:
+          - name: id_ref_zdc
+            description: "Zone de correspondance ID — matches 'ida' field in raw_validations"
+            data_tests:
+              - not_null
+              - unique
+          - name: station_name
+            description: "Official station name"
+          - name: latitude
+            description: "Station latitude"
+          - name: longitude
+            description: "Station longitude"
+
