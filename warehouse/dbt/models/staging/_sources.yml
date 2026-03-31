@@ -78,7 +78,12 @@ sources:
             description: "Zone de correspondance ID — matches 'ida' field in raw_validations"
             data_tests:
               - not_null
-              - unique
+              - unique:
+                  config:
+                    severity: warn
+                    warn_if: "> 0"
+                  # raw_ref_stations has multiple entries per id_ref_zdc (one per platform/access)
+                  # deduplication happens in stg_ref_stations via ROW_NUMBER()
           - name: station_name
             description: "Official station name"
           - name: latitude

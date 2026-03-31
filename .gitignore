@@ -138,3 +138,6 @@ orchestration/airflow/data/bronze/**/*.parquet
 !orchestration/airflow/data/.gitkeep
 
 docs/elementary_report.html
+
+# dbt seeds — always track
+!warehouse/dbt/seeds/*.csv

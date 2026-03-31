@@ -57,16 +57,18 @@ def extract_ref_stations(output_dir: Path = None) -> Path:
 
         for r in results:
             geo = r.get("geo_point_2d", {})
-            all_records.append({
-                "id_ref_zdc": r.get("id_ref_zdc"),
-                "station_name": r.get("nom_gares"),
-                "latitude": geo.get("lat"),
-                "longitude": geo.get("lon"),
-                "mode": r.get("mode"),
-                "operator": r.get("exploitant"),
-                "source": "idfm_ref_stations",
-                "ingestion_ts": ingestion_ts,
-            })
+            all_records.append(
+                {
+                    "id_ref_zdc": r.get("id_ref_zdc"),
+                    "station_name": r.get("nom_gares"),
+                    "latitude": geo.get("lat"),
+                    "longitude": geo.get("lon"),
+                    "mode": r.get("mode"),
+                    "operator": r.get("exploitant"),
+                    "source": "idfm_ref_stations",
+                    "ingestion_ts": ingestion_ts,
+                }
+            )
 
         total = data.get("total_count", 0)
         params["offset"] += len(results)

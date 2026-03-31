@@ -1,0 +1,9 @@
+ticket_type_code,ticket_type_label,category,is_navigo
+Navigo,Navigo Mensuel,Abonnement,true
+Navigo Annuel,Navigo Annuel,Abonnement,true
+Navigo Semaine,Navigo Hebdomadaire,Abonnement,true
+Navigo Jour,Navigo Jour,Occasionnel,false
+t+ billet,Ticket T+,Occasionnel,false
+Imagine R,Imagine R Scolaire,Abonnement,true
+Navigo Easy,Navigo Easy,Occasionnel,false
+Autres,Autres titres,Autre,false
