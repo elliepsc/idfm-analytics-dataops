@@ -1,42 +1,44 @@
 {{
   config(
     materialized='table',
-    description='Daily validations aggregated by station with coordinates — used for Looker Studio map'
+    description='Daily validations aggregated by station with coordinates — Looker Studio map. Joins via station_id_zdc=id_ref_zdc.'
   )
 }}
 
--- Daily validation counts per station with geographic coordinates
--- Joins fct_validations_daily with dim_stop to add lat/lon for Looker Studio map
--- Grain: 1 station × 1 day
+-- Grain: 1 station x 1 day
+-- station_id_zdc propagated from raw_validations.ida through stg → fct
 
 WITH validations AS (
   SELECT
     validation_date,
-    stop_id,
+    station_id_zdc,
     stop_name,
     SUM(validation_count) AS daily_validation_count
-  FROM {{ ref('fct_validations_daily') }}
-  GROUP BY validation_date, stop_id, stop_name
+  FROM {{ ref("fct_validations_daily") }}
+  WHERE station_id_zdc IS NOT NULL
+  GROUP BY validation_date, station_id_zdc, stop_name
 ),
 
-stops AS (
+stations AS (
   SELECT
-    stop_id,
+    station_id,
+    station_name,
     latitude,
     longitude,
-    town
-  FROM {{ ref('dim_stop') }}
-  WHERE latitude IS NOT NULL
-    AND longitude IS NOT NULL
+    transport_mode,
+    operator
+  FROM {{ ref("stg_ref_stations") }}
 )
 
 SELECT
   v.validation_date,
-  v.stop_id,
+  v.station_id_zdc,
   v.stop_name,
+  s.station_name,
   s.latitude,
   s.longitude,
-  s.town,
+  s.transport_mode,
+  s.operator,
   v.daily_validation_count
 FROM validations v
-INNER JOIN stops s ON v.stop_id = s.stop_id
+INNER JOIN stations s ON v.station_id_zdc = s.station_id

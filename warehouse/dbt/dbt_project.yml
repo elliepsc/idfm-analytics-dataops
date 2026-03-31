@@ -70,4 +70,16 @@ seeds:
         ticket_type_label: string
         category: string
         is_navigo: boolean
+    stop_coordinates_complement:
+      +column_types:
+        station_id_zdc: integer
+        stop_name: string
+        latitude: float
+        longitude: float
+    stop_coordinates_complement:
+      +column_types:
+        station_id_zdc: integer
+        stop_name: string
+        latitude: float
+        longitude: float
 

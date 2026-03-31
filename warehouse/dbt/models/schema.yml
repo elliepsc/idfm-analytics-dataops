@@ -483,14 +483,19 @@ models:
               quote: false
 
   - name: mart_validations_station_daily
-    description: "Daily validations per station with lat/lon coordinates — used for Looker Studio map"
+    description: "Daily validations per station with lat/lon coordinates — used for Looker Studio map. Joins via station_id_zdc=id_ref_zdc. Covers ~100% of validation volume (primary source + complement seed)."
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "latitude IS NOT NULL AND longitude IS NOT NULL"
+          config:
+            severity: error
     columns:
       - name: validation_date
         description: "Date of validations"
         data_tests:
           - not_null
-      - name: stop_id
-        description: "Unique stop identifier"
+      - name: station_id_zdc
+        description: "Zone de correspondance ID — joins raw_validations.ida with raw_ref_stations.id_ref_zdc"
         data_tests:
           - not_null
       - name: stop_name

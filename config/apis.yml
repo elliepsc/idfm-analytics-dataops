@@ -19,6 +19,7 @@ idfm:
         line_code_res: "code_stif_res"    # STIF network code (e.g. "802")
         ticket_type: "categorie_titre"    # Ticket category (e.g. "Amethyste")
         validation_count: "nb_vald"       # Number of validations (int)
+        station_id_zdc: "ida"             # correspondance ID — joins with raw_ref_stations.id_ref_zdc
       filters:
         date_field: "jour"
     # -------------------------------------------------------------------------

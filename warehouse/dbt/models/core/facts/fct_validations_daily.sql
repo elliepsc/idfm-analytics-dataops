@@ -34,6 +34,7 @@ SELECT
   day_of_week,
   stop_id,
   stop_name,
+  station_id_zdc,
   line_code_trns,
   line_code_res,
   ticket_type,

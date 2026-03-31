@@ -30,6 +30,7 @@ cleaned AS (
     -- Stop identifier
     UPPER(TRIM(stop_id)) AS stop_id,
     TRIM(stop_name) AS stop_name,
+    CAST(station_id_zdc AS INT64) AS station_id_zdc,  -- Zone de correspondance ID — joins with raw_ref_stations.id_ref_zdc
 
     -- Line codes (INT64 in BigQuery — cast to STRING before TRIM/UPPER)
     UPPER(TRIM(CAST(line_code_trns AS STRING))) AS line_code_trns,
