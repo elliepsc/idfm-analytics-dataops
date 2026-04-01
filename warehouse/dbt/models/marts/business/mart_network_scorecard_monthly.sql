@@ -35,10 +35,10 @@ combined AS (
     p.line_id,
 
     -- Demand metrics (network-wide, no line breakdown available from validations)
-    v.total_validations,
-    v.days_with_data,
-    v.stops_count,
-    SAFE_DIVIDE(v.total_validations, v.days_with_data) AS avg_daily_validations,
+    COALESCE(v.total_validations, 0)                    AS total_validations,
+    COALESCE(v.days_with_data, 0)                       AS days_with_data,
+    COALESCE(v.stops_count, 0)                          AS stops_count,
+    SAFE_DIVIDE(COALESCE(v.total_validations, 0), NULLIF(COALESCE(v.days_with_data, 0), 0)) AS avg_daily_validations,
 
     -- Quality metrics
     p.punctuality_rate,

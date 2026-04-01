@@ -373,20 +373,15 @@ models:
         data_tests:
           - not_null
       - name: total_validations
-        description: "Total validations for the month"
+        description: "Total validations for the month (0 if no validation data for that month)"
         data_tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
       - name: avg_daily_validations
-        description: "Average daily validations over the month"
+        description: "Average daily validations over the month (NULL if no days with data)"
         data_tests:
-          - not_null:
-              config:
-                severity: warn
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
