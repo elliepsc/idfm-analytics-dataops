@@ -16,7 +16,7 @@ sources:
   network: ferre
   period: 2023-S1
   loaded: true
-  loaded_at: '2026-03-07T19:04:38Z'
+  loaded_at: '2026-04-01T10:28:43Z'
 - file: data-rf-2023/data-rf-2023/2023_S2_NB_FER.txt
   zip_url: dynamic
   zip_name: data-rf-2023.zip
@@ -26,7 +26,7 @@ sources:
   network: ferre
   period: 2023-S2
   loaded: true
-  loaded_at: '2026-03-08T11:24:04Z'
+  loaded_at: '2026-04-01T10:29:02Z'
 - file: data-rf-2024/2024_S1_NB_FER.txt
   zip_url: dynamic
   zip_name: data-rf-2024.zip
@@ -36,7 +36,7 @@ sources:
   network: ferre
   period: 2024-S1
   loaded: true
-  loaded_at: '2026-03-08T11:24:20Z'
+  loaded_at: '2026-04-01T10:29:22Z'
 - file: data-rf-2024/2024_T3_NB_FER.txt
   zip_url: dynamic
   zip_name: data-rf-2024.zip
@@ -46,7 +46,7 @@ sources:
   network: ferre
   period: 2024-T3
   loaded: true
-  loaded_at: '2026-03-08T11:24:33Z'
+  loaded_at: '2026-04-01T10:29:49Z'
 - file: validations-reseau-ferre-T4-2024.csv
   zip_url: https://storage.googleapis.com/idfm-backfill-sources/validations-reseau-ferre-T4-2024.csv
   zip_name: null
@@ -62,7 +62,7 @@ sources:
   network: ferre
   period: 2024-T4
   loaded: true
-  loaded_at: '2026-03-08T11:24:45Z'
+  loaded_at: '2026-04-01T10:30:01Z'
 - file: validations-reseau-ferre-nombre-validations-par-jour-recent.csv
   zip_url: https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/validations-reseau-ferre-nombre-validations-par-jour-4eme-trimestre/exports/csv
   zip_name: null
@@ -77,4 +77,4 @@ sources:
   network: ferre
   period: 2025-recent
   loaded: true
-  loaded_at: '2026-03-10T11:37:09Z'
+  loaded_at: '2026-04-01T10:30:14Z'

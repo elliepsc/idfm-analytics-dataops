@@ -147,6 +147,15 @@ elementary-report:  ## Generate Elementary data observability report
 
 pipeline-daily: ingest load-raw dbt-build  ## Full daily pipeline
 
+historical-backfill:  ## Load historical validation data (2023-2024) from IDFM ZIP files
+	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py
+
+historical-backfill-dry:  ## Dry run — download + parse only, no BigQuery writes
+	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py --dry-run
+
+historical-backfill-force:  ## Force reload all periods (even already loaded)
+	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py --force
+
 pipeline-backfill:  ## Backfill (requires START_DATE and END_DATE)
 	@echo "Backfill from $(START_DATE) to $(END_DATE)"
 	$(MAKE) ingest START_DATE=$(START_DATE) END_DATE=$(END_DATE)
