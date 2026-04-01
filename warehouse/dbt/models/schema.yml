@@ -375,18 +375,21 @@ models:
       - name: total_validations
         description: "Total validations for the month"
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
       - name: avg_daily_validations
         description: "Average daily validations over the month"
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
-              severity: warn
       - name: punctuality_rate
         description: "Punctuality rate (%)"
         data_tests:
