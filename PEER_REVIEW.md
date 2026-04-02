@@ -155,7 +155,24 @@ Sources: `fct_validations_daily` (4.1M rows, 2023–2025) · `mart_validations_s
 
 ### ✅ Reproducibility (4/4)
 
-**Where to look**: `README.md` · `terraform/` · `ingestion/backfill/backfill_sources.yml` · `Makefile`
+Reproducibility is not just the README — it is the combined result of multiple files working together:
+
+| File / Folder | Reproducibility contribution |
+|---------------|------------------------------|
+| `README.md` | Step-by-step setup guide from clone to dashboard |
+| `SETUP.md` | Detailed environment setup — dbt profiles, ADC, Airflow, aliases |
+| `.env.example` | Documents every required environment variable with descriptions |
+| `orchestration/airflow/.env.example` | Airflow-specific env variables (connections, Slack webhook) |
+| `terraform/` | All GCP datasets provisioned via `terraform apply` — zero click-ops |
+| `terraform/envs/dev.tfvars.example` | Fictitious dev values — reviewer can adapt for their own project |
+| `terraform/envs/prod.tfvars.example` | Fictitious prod values |
+| `ingestion/backfill/backfill_sources.yml` | Manifest with every historical source URL, period, and loaded status |
+| `ingestion/backfill/run_backfill.py` | Self-contained orchestrator — downloads ZIPs, parses, MERGEs into BQ |
+| `Makefile` | Single entry point for every operation (`make help` lists all targets) |
+| `warehouse/dbt/profiles.yml` | Dev/prod/elementary targets — no hardcoded values, all from env vars |
+| `warehouse/dbt/seeds/` | Station coordinate complement — small reference data in version control |
+| `requirements.txt` | Pinned Python dependencies |
+| `orchestration/airflow/docker-compose.yml` | Airflow stack fully containerised — one command to start |
 
 A reviewer can reproduce the full pipeline from scratch:
 
@@ -193,8 +210,8 @@ cd warehouse/dbt && dbt deps && dbt build --target prod
 - T4 2024 data is archived in a **public GCS bucket** (`gs://idfm-backfill-sources`) — no manual download needed
 - All other historical ZIPs are resolved dynamically from the IDFM catalog API at runtime
 - All GCP infrastructure is in `terraform/` — no manual dataset creation
-- `.env.example` documents all required environment variables
 - `make historical-backfill-force` safely reloads all periods after any schema change (MERGE idempotent)
+- `make help` lists every available command — no tribal knowledge required
 
 ---
 
