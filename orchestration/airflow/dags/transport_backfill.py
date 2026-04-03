@@ -17,8 +17,6 @@ import pendulum
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.slack.operators.slack_webhook import \
-    SlackWebhookOperator
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -75,8 +73,6 @@ def extract_punctuality_backfill(**context):
 
     sys.path.insert(0, "/opt/airflow/ingestion")
     import extract_ponctuality as mod
-    import pendulum
-    from dateutil.relativedelta import relativedelta
 
     # Get date range from DAG run config
     dag_run = context["dag_run"]
@@ -146,7 +142,6 @@ def validate_backfill(**context):
     Validate backfill completeness
     Check that data exists for all dates in range
     """
-    import pendulum
     from google.cloud import bigquery
 
     # Get date range from DAG run config
@@ -161,7 +156,7 @@ def validate_backfill(**context):
 
     # Count records per date
     query = f"""
-    SELECT 
+    SELECT
         date,
         COUNT(*) as record_count
     FROM `transport_raw.raw_validations`
@@ -277,8 +272,7 @@ with DAG(
 
     def notify_success_fn(**context):
         try:
-            from airflow.providers.slack.hooks.slack_webhook import \
-                SlackWebhookHook
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
             SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
                 text="Backfill SUCCESS"

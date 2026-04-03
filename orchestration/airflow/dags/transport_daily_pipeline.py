@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration

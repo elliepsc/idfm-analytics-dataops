@@ -12,7 +12,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 sys.path.insert(0, "/opt/airflow/dags")
-from utils.monitoring import (
+from utils.monitoring import (  # noqa: E402
     check_punctuality_freshness,
     check_statistical_anomaly,
     check_validation_count_threshold,
@@ -107,7 +107,11 @@ def run_statistical_anomaly_check(**context):
     # Send enriched Slack alert if anomaly detected
     if anomaly["is_anomaly"]:
         direction_emoji = "📉" if anomaly["direction"] == "low" else "📈"
-        direction_label = "anormalement basse" if anomaly["direction"] == "low" else "anormalement haute"
+        direction_label = (
+            "anormalement basse"
+            if anomaly["direction"] == "low"
+            else "anormalement haute"
+        )
 
         message = (
             f"{direction_emoji} *Anomalie statistique détectée* — {execution_date}\n"
@@ -121,6 +125,7 @@ def run_statistical_anomaly_check(**context):
 
         try:
             from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+
             SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text=message)
             logger.warning("Anomaly Slack alert sent for %s", execution_date)
         except Exception as e:
@@ -228,4 +233,8 @@ with DAG(
     )
 
     # check_anomaly runs in parallel with the other checks
-    [check_validations, check_punctuality, check_anomaly] >> log_metrics >> notify_success
+    (
+        [check_validations, check_punctuality, check_anomaly]
+        >> log_metrics
+        >> notify_success
+    )

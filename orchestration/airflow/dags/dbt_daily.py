@@ -13,8 +13,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.slack.operators.slack_webhook import \
-    SlackWebhookOperator
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -165,8 +163,7 @@ with DAG(
 
     def notify_success_fn(**context):
         try:
-            from airflow.providers.slack.hooks.slack_webhook import \
-                SlackWebhookHook
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
             SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
                 text="dbt Daily SUCCESS"

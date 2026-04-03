@@ -47,13 +47,13 @@ jobs:
           echo "✅ Terraform config valid"
 
       - name: Lint Python (black)
-        run: black --check ingestion/ scripts/
+        run: black --check ingestion/ scripts/ orchestration/airflow/dags/ tests/
 
       - name: Lint Python (isort)
-        run: isort --check-only ingestion/ scripts/
+        run: isort --check-only ingestion/ scripts/ orchestration/airflow/dags/ tests/
 
       - name: Lint Python (flake8)
-        run: flake8 ingestion/ scripts/ --max-line-length=120 --extend-ignore=E203
+        run: flake8 ingestion/ scripts/ orchestration/airflow/dags/ tests/ --max-line-length=120 --extend-ignore=E203
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
