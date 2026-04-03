@@ -216,23 +216,35 @@ def check_statistical_anomaly(
             return result
 
         # Split: baseline (all days except today) vs today
-        baseline = [row.daily_total for row in rows if str(row.validation_date) != execution_date]
-        today_rows = [row.daily_total for row in rows if str(row.validation_date) == execution_date]
+        baseline = [
+            row.daily_total
+            for row in rows
+            if str(row.validation_date) != execution_date
+        ]
+        today_rows = [
+            row.daily_total
+            for row in rows
+            if str(row.validation_date) == execution_date
+        ]
 
         if not today_rows:
-            logger.warning("No data found for execution_date %s. Skipping.", execution_date)
+            logger.warning(
+                "No data found for execution_date %s. Skipping.", execution_date
+            )
             return result
 
         today_count = today_rows[0]
 
         if len(baseline) < 2:
-            logger.warning("Not enough baseline days (%d). Skipping z-score.", len(baseline))
+            logger.warning(
+                "Not enough baseline days (%d). Skipping z-score.", len(baseline)
+            )
             return result
 
         # Compute mean and std over baseline
         mean_7d = sum(baseline) / len(baseline)
         variance = sum((x - mean_7d) ** 2 for x in baseline) / len(baseline)
-        std_7d = variance ** 0.5
+        std_7d = variance**0.5
 
         # Avoid division by zero (e.g. all baseline values identical)
         if std_7d == 0:
@@ -248,14 +260,16 @@ def check_statistical_anomaly(
         elif z_score > z_score_threshold:
             direction = "high"
 
-        result.update({
-            "today_count": int(today_count),
-            "mean_7d": round(mean_7d, 0),
-            "std_7d": round(std_7d, 0),
-            "z_score": round(z_score, 3),
-            "is_anomaly": is_anomaly,
-            "direction": direction,
-        })
+        result.update(
+            {
+                "today_count": int(today_count),
+                "mean_7d": round(mean_7d, 0),
+                "std_7d": round(std_7d, 0),
+                "z_score": round(z_score, 3),
+                "is_anomaly": is_anomaly,
+                "direction": direction,
+            }
+        )
 
         if is_anomaly:
             logger.warning(
