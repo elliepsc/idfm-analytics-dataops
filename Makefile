@@ -128,6 +128,10 @@ dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_validations_da
 check-sla:  ## Check SLA compliance (data health)
 	$(PYTHON) scripts/check_sla.py
 
+ge-validate:  ## Run Great Expectations data quality checks locally (generates fixture data first)
+	$(PYTHON) scripts/create_test_data.py
+	$(PYTHON) scripts/validate_data_quality.py
+
 # ─────────────────────────────────────────────────────────────
 # FULL WORKFLOWS
 # ─────────────────────────────────────────────────────────────

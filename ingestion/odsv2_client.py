@@ -214,13 +214,17 @@ class ODSv2Client:
         self, records: List[Dict[str, Any]], field_mapping: Dict[str, str]
     ) -> List[Dict[str, Any]]:
         """
-        Extract and rename fields from API records
+        DEPRECATED — Do not use with current IDFM datasets.
 
-        ODS API returns data in record['record']['fields'] structure.
-        This method extracts specified fields and renames them.
+        This method expects ODS v1 format: record['record']['fields'].
+        Current IDFM datasets (validations, punctuality, ref_lines, ref_stops)
+        use ODS v2 format where fields are at ROOT level — use record.get(source)
+        directly instead (see extract_validations.py, extract_ponctuality.py).
+
+        Kept for backward compatibility only. Will be removed in V4.
 
         Args:
-            records: Raw records from API
+            records: Raw records from API (ODS v1 format only)
             field_mapping: Mapping {target_name: source_name}
                 Example: {'date': 'jour', 'line': 'ligne'}
 
