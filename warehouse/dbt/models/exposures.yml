@@ -33,7 +33,7 @@ exposures:
       - ref('dim_ticket_type')
 
   - name: data_quality_monitoring
-    type: ml
+    type: dashboard
     maturity: low
     owner:
       name: Data Team
@@ -45,3 +45,33 @@ exposures:
     depends_on:
       - ref('fct_data_health_daily')
       - ref('all_metrics')
+
+  - name: station_map
+    type: dashboard
+    maturity: medium
+    owner:
+      name: Data Team
+      email: data@idfm.fr
+    description: >
+      Looker Studio page 5 — geographic map of daily validations by station.
+      Displays station_id_zdc with lat/lon coordinates and daily_validation_count.
+      Covers ~93% of validation volume via primary source + complement seed.
+    config:
+      tags: ['dashboard', 'map', 'stations']
+    depends_on:
+      - ref('mart_validations_station_daily')
+
+  - name: network_scorecard
+    type: dashboard
+    maturity: medium
+    owner:
+      name: Data Team
+      email: data@idfm.fr
+    description: >
+      Looker Studio network scorecard — monthly demand and punctuality KPIs by line.
+      Tracks MoM validation growth, punctuality rate, quality category and risk classification.
+    config:
+      tags: ['dashboard', 'scorecard', 'punctuality']
+    depends_on:
+      - ref('mart_network_scorecard_monthly')
+      - ref('dim_line')
