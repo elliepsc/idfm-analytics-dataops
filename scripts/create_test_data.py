@@ -8,6 +8,7 @@ validate_data_quality.py uses to run GE expectations locally in CI
 Called by: .github/workflows/data-quality.yml (Great Expectations validate step)
 Run locally: make ge-validate
 """
+
 import json
 import pathlib
 

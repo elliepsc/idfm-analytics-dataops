@@ -17,8 +17,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.slack.operators.slack_webhook import \
-    SlackWebhookOperator
+from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -174,14 +173,38 @@ with DAG(
     )
 
     # ─────────────────────────────────────────────────────────────
-    # STAGE 3: Transform with dbt (run + test)
+    # STAGE 3a: Install dbt dependencies
+    # ─────────────────────────────────────────────────────────────
+    # FIX: previously dbt deps && dbt build ran in a single BashOperator.
+    # On slow Docker volumes, dbt build could start before dbt deps had
+    # finished writing packages to disk → elementary undefined → ERROR on
+    # on-run-start hook → attempt 1 always failed, attempt 2 succeeded
+    # from cache. Separating into two tasks guarantees ordering.
+
+    dbt_deps_task = BashOperator(
+        task_id="dbt_deps",
+        bash_command="""
+            cd /opt/airflow/warehouse/dbt && \
+            /home/airflow/.local/bin/dbt deps
+        """,
+        env={
+            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
+            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
+            "BQ_DATASET_RAW": "transport_raw",
+            "BQ_DATASET_STAGING": "transport_staging",
+            "BQ_DATASET_ANALYTICS": "transport_staging_analytics",
+        },
+    )
+
+    # ─────────────────────────────────────────────────────────────
+    # STAGE 3b: Transform with dbt (run + test)
     # ─────────────────────────────────────────────────────────────
 
     dbt_build_task = BashOperator(
         task_id="dbt_build",
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt deps && /home/airflow/.local/bin/dbt build --target prod --select +marts dim_stop stg_ref_stops
+            /home/airflow/.local/bin/dbt build --target prod --select +marts dim_stop stg_ref_stops
         """,
         env={
             "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
@@ -208,8 +231,7 @@ with DAG(
 
     def notify_success_fn(**context):
         try:
-            from airflow.providers.slack.hooks.slack_webhook import \
-                SlackWebhookHook
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
             SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
                 text="Pipeline SUCCESS"
@@ -237,8 +259,14 @@ with DAG(
         extract_referentials_task,
     ] >> load_bigquery_task
 
-    # Sequential: Load → Transform → Validate → Notify
-    load_bigquery_task >> dbt_build_task >> check_sla_task >> notify_success
+    # Sequential: Load → dbt deps → dbt build → Validate → Notify
+    (
+        load_bigquery_task
+        >> dbt_deps_task
+        >> dbt_build_task
+        >> check_sla_task
+        >> notify_success
+    )
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -252,8 +280,7 @@ def task_failure_alert(context):
     """
     # FIX V2: wrap in try/except — Slack connection may not be configured in dev/local
     try:
-        from airflow.providers.slack.hooks.slack_webhook import \
-            SlackWebhookHook
+        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
         slack_hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
         slack_hook.send(
