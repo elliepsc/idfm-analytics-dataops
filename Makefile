@@ -117,12 +117,26 @@ dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_punctuality_mo
 	# ⚠️  Use case for fct_punctuality_monthly:
 	#     SNCF occasionally publishes retroactive corrections for past months.
 	#     insert_overwrite only recomputes the current partition on normal runs.
-	#     Run this target when a past-month correction is confirmed in raw_punctuality.
+	#     Past-month corrections are silently ignored by the nightly DAG.
 	#
-	#     Example: make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	#     PREREQUISITE — run ingestion FIRST to load the correction into raw_punctuality:
+	#       make ingest-punctuality START_DATE=YYYY-MM-01 END_DATE=YYYY-MM-31
+	#     Without this step, the refresh reads stale raw data and the correction
+	#     is NOT captured — the result is identical to before the refresh.
 	#
-	#     NOTE: this is a partial mitigation. A full fix would switch the incremental
-	#     strategy to merge (unique_key=punctuality_key) — tracked as post-V3 backlog.
+	#     THEN recompute fct_punctuality_monthly from the updated raw:
+	#       make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	#
+	#     Full procedure:
+	#       1. Confirm correction published by SNCF (check raw_punctuality source)
+	#       2. make ingest-punctuality START_DATE=<month_start> END_DATE=<month_end>
+	#       3. make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	#       4. Verify in Looker Studio that the corrected month reflects the update
+	#
+	#     NOTE: this is a partial mitigation — requires manual human action.
+	#     A proper fix would switch the incremental strategy to merge
+	#     (unique_key=punctuality_key) so corrections are picked up automatically.
+	#     Tracked as post-V3 backlog item.
 	docker exec -it airflow-airflow-scheduler-1 bash -c \
 	  "cd /opt/airflow/warehouse/dbt && \
 	   /home/airflow/.local/bin/dbt run \

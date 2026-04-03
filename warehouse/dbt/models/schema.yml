@@ -329,19 +329,24 @@ models:
       month. Past-month corrections must be triggered manually.
 
       **Procedure for recomputing a past month:**
+
+      Step 1 — ingest the corrected data into raw first (required):
+      ```
+      make ingest-punctuality START_DATE=YYYY-MM-01 END_DATE=YYYY-MM-31
+      ```
+      Step 2 — recompute fct_punctuality_monthly from the updated raw:
       ```
       make dbt-refresh-prod MODEL=fct_punctuality_monthly
       ```
-      This forces a full-refresh on the model, recomputing all partitions
-      from `stg_punctuality_monthly`. Run only when a retroactive correction
-      is confirmed in the source data.
+      ⚠️ Skipping step 1 and running step 2 alone reads stale raw data —
+      the correction will NOT be captured. Both steps are mandatory.
 
       **Known limitation (partial mitigation only):**
-      This note and the `make dbt-refresh-prod` target document the risk
-      but do not automate detection of retroactive corrections. A proper fix
-      would be to switch the incremental strategy from `insert_overwrite` to
-      `merge` with `unique_key='punctuality_key'` — tracked as a future
-      improvement (post-V3, low priority given low correction frequency).
+      This procedure requires manual human action — there is no automatic
+      detection of retroactive SNCF corrections. A proper fix would switch
+      the incremental strategy from `insert_overwrite` to `merge`
+      (unique_key=punctuality_key), so corrections are picked up
+      automatically on every run. Tracked as a post-V3 backlog item.
     columns:
       - name: punctuality_key
         description: "Unique surrogate key (PK)"
