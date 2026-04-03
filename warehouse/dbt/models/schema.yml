@@ -300,7 +300,7 @@ models:
           - not_null
 
   - name: fct_punctuality_monthly
-    description: |
+    description: |-
       **Monthly punctuality fact table**
 
       **Grain**: 1 line x 1 month
@@ -314,9 +314,34 @@ models:
 
       **Clustering**: line_id
 
-      **Materialization**: Incremental
+      **Materialization**: Incremental (`insert_overwrite`)
 
       **Refresh**: Monthly (+ 5 days after month end)
+
+      ---
+
+      ⚠️ **Operational risk — insert_overwrite on monthly partitions**
+
+      `insert_overwrite` replaces the entire month partition on each run.
+      SNCF occasionally publishes retroactive corrections for past months.
+      If a correction arrives in `raw_punctuality` after the initial load,
+      the next DAG run will correctly re-ingest it — but only for the current
+      month. Past-month corrections must be triggered manually.
+
+      **Procedure for recomputing a past month:**
+      ```
+      make dbt-refresh-prod MODEL=fct_punctuality_monthly
+      ```
+      This forces a full-refresh on the model, recomputing all partitions
+      from `stg_punctuality_monthly`. Run only when a retroactive correction
+      is confirmed in the source data.
+
+      **Known limitation (partial mitigation only):**
+      This note and the `make dbt-refresh-prod` target document the risk
+      but do not automate detection of retroactive corrections. A proper fix
+      would be to switch the incremental strategy from `insert_overwrite` to
+      `merge` with `unique_key='punctuality_key'` — tracked as a future
+      improvement (post-V3, low priority given low correction frequency).
     columns:
       - name: punctuality_key
         description: "Unique surrogate key (PK)"

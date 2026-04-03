@@ -113,7 +113,16 @@ dbt-compile:  ## Compile models (no execution)
 dbt-parse:  ## Parse models (CI)
 	cd warehouse/dbt && $(DBT) parse --profiles-dir . --profile transport_ci --target ci
 
-dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_validations_daily)
+dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_punctuality_monthly for retroactive SNCF corrections)
+	# ⚠️  Use case for fct_punctuality_monthly:
+	#     SNCF occasionally publishes retroactive corrections for past months.
+	#     insert_overwrite only recomputes the current partition on normal runs.
+	#     Run this target when a past-month correction is confirmed in raw_punctuality.
+	#
+	#     Example: make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	#
+	#     NOTE: this is a partial mitigation. A full fix would switch the incremental
+	#     strategy to merge (unique_key=punctuality_key) — tracked as post-V3 backlog.
 	docker exec -it airflow-airflow-scheduler-1 bash -c \
 	  "cd /opt/airflow/warehouse/dbt && \
 	   /home/airflow/.local/bin/dbt run \

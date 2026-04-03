@@ -288,7 +288,7 @@ warehouse/dbt/snapshots/
 | `stg_*` | View | Lightweight, recomputed on demand |
 | `dim_*` | Table | Stable reference, frequent joins |
 | `fct_validations_daily` | Incremental | ~15k rows/day, append-only pattern |
-| `fct_punctuality_monthly` | Incremental | Monthly data, no recomputation needed |
+| `fct_punctuality_monthly` | Incremental | Monthly data — ⚠️ `insert_overwrite` replaces full partition. SNCF retroactive corrections require `make dbt-refresh-prod MODEL=fct_punctuality_monthly`. See `schema.yml` for full procedure. |
 | `mart_*`, `metrics_*` | Table | Expensive aggregations, pre-computed |
 | `snap_*` | Snapshot | SCD Type 2 — tracks reference changes over time |
 
