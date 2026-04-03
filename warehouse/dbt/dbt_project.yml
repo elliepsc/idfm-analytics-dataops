@@ -5,9 +5,6 @@ config-version: 2
 flags:
   require_explicit_package_overrides_for_builtin_materializations: false
 
-flags:
-  require_explicit_package_overrides_for_builtin_materializations: false
-
 profile: 'transport'
 
 model-paths: ["models"]
@@ -40,10 +37,10 @@ models:
         +materialized: incremental
         +on_schema_change: "append_new_columns"
         +incremental_strategy: "insert_overwrite"
-        +partition_by:
-          field: "date"
-          data_type: "date"
-          granularity: "day"
+        # +partition_by:      # fct models defines when own partitioning, so no longer needed here:
+        #   field: "date"     # fct_validations_daily: field=validation_date, granularity=day & fct_validations_monthly: field=validation_month, granularity=month
+        #   data_type: "date" # does not corresond to the actual data type of the field, but to the granularity of the partitioning (day, month, etc.)
+        #   granularity: "day"
 
     marts:
       +materialized: table
@@ -58,6 +55,8 @@ models:
     +materialized: table
 
 vars:
+  # Dev date filters — used in incremental fact models to limit BQ scan in dev
+  # (avoids full 4.1M row scan on every dbt build --target dev)
   dev_start_date: '2024-01-01'
   dev_end_date: '2024-12-31'
 
@@ -70,12 +69,6 @@ seeds:
         ticket_type_label: string
         category: string
         is_navigo: boolean
-    stop_coordinates_complement:
-      +column_types:
-        station_id_zdc: integer
-        stop_name: string
-        latitude: float
-        longitude: float
     stop_coordinates_complement:
       +column_types:
         station_id_zdc: integer

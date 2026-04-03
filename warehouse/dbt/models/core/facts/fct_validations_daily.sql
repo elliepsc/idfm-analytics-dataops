@@ -20,7 +20,12 @@ WITH validations AS (
   SELECT * FROM {{ ref('stg_validations_rail_daily') }}
 
   {% if is_incremental() %}
+    {% if target.name == 'dev' %}
+  -- Dev: limit scan to configured date window (avoids full 4.1M row scan)
+  WHERE validation_date BETWEEN '{{ var("dev_start_date") }}' AND '{{ var("dev_end_date") }}'
+    {% else %}
   WHERE validation_date > (SELECT MAX(validation_date) FROM {{ this }})
+    {% endif %}
   {% endif %}
 )
 
@@ -38,9 +43,7 @@ SELECT
   line_code_trns,
   line_code_res,
   ticket_type,
-
   validation_count,
-
   ingestion_ts,
   CURRENT_TIMESTAMP() AS dbt_updated_at
 

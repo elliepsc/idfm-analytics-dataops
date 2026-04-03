@@ -17,7 +17,12 @@ WITH punctuality AS (
   SELECT * FROM {{ ref('stg_punctuality_monthly') }}
 
   {% if is_incremental() %}
+    {% if target.name == 'dev' %}
+  -- Dev: limit scan to configured date window
+  WHERE month_date BETWEEN '{{ var("dev_start_date") }}' AND '{{ var("dev_end_date") }}'
+    {% else %}
   WHERE month_date > (SELECT MAX(month_date) FROM {{ this }})
+    {% endif %}
   {% endif %}
 )
 
