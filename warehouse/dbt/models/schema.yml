@@ -266,11 +266,22 @@ models:
           a completely different concept from the operator code. Cannot be joined
           to dim_line without an intermediate mapping table — tracked as V3
           improvement (operator code to line_id mapping).
+
+          Known operator codes: 100 (RATP), 760-762 (Optile), 800-890 (SNCF Transilien).
+          New Optile operators may appear as the network evolves — using
+          not_accepted_values on clearly invalid values is more robust than
+          maintaining an exhaustive allowlist.
         data_tests:
           - not_null
-          - accepted_values:
-              values: ['100', '760', '762', '800', '810', '820', '830', '840', '850', '860', '870', '880', '890']
-              severity: warn
+          - dbt_utils.not_accepted_values:
+              values: ['0', '-1', 'NULL', 'UNKNOWN']
+              config:
+                severity: warn
+                # Rationale: operator code space is open-ended (new Optile operators
+                # added periodically). Blocking on unknown values generates false
+                # positives. Only reject values that are structurally invalid.
+                # Run SELECT DISTINCT line_code_trns FROM transport_raw.raw_validations
+                # to audit the current full list.
       - name: ticket_type
         description: "Ticket category (normalized UPPER)"
         data_tests:
