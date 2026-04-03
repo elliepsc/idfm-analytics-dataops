@@ -46,7 +46,7 @@ setup-gcp:  ## Configure BigQuery (datasets + tables)
 	$(PYTHON) scripts/setup_bigquery.py
 
 test:  ## Run unit tests
-	pytest tests/unit/ -v --cov=ingestion
+	pytest tests/unit/ -v --cov=ingestion --cov=scripts --cov-report=term-missing
 
 lint:  ## Check code style (Python + SQL)
 	black --check ingestion/ scripts/
