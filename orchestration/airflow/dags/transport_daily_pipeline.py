@@ -225,6 +225,81 @@ with DAG(
     )
 
     # ─────────────────────────────────────────────────────────────
+    # STAGE 3c: Verify row counts after dbt build (blocking gate)
+    # ─────────────────────────────────────────────────────────────
+    # Inspired by Kairoskop verify_bigquery pattern.
+    # check_sla runs in a separate DAG at 7 AM — by then a zero-row
+    # table would have already served a broken dashboard for hours.
+    # This task blocks the pipeline immediately if critical tables are empty.
+
+    def verify_row_counts(**context):
+        """Blocking gate: fails the pipeline if critical tables are empty after dbt build."""
+        import logging
+        import os
+
+        logger = logging.getLogger(__name__)
+
+        project_id = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
+        dataset_core = os.getenv("BQ_DATASET_STAGING", "transport_staging") + "_core"
+        dataset_analytics = (
+            os.getenv("BQ_DATASET_STAGING", "transport_staging") + "_analytics"
+        )
+
+        # Tables that MUST have rows after a successful dbt build
+        critical_tables = [
+            (dataset_core, "fct_validations_daily", 1_000_000),  # min 1M rows expected
+            (dataset_analytics, "mart_network_scorecard_monthly", 10),
+            (dataset_analytics, "mart_validations_station_daily", 100),
+        ]
+
+        try:
+            from google.cloud import bigquery
+
+            client = bigquery.Client(project=project_id)
+            failures = []
+
+            for dataset, table, min_rows in critical_tables:
+                query = f"""
+                    SELECT COUNT(*) AS row_count
+                    FROM `{project_id}.{dataset}.{table}`
+                """
+                result = list(client.query(query).result())
+                row_count = result[0].row_count if result else 0
+
+                if row_count < min_rows:
+                    failures.append(
+                        f"{dataset}.{table}: {row_count} rows (expected >= {min_rows})"
+                    )
+                    logger.error(
+                        "❌ %s.%s: %d rows < %d minimum",
+                        dataset,
+                        table,
+                        row_count,
+                        min_rows,
+                    )
+                else:
+                    logger.info("✅ %s.%s: %d rows", dataset, table, row_count)
+
+            if failures:
+                raise ValueError(
+                    f"Row count verification failed for {len(failures)} table(s):\n"
+                    + "\n".join(failures)
+                )
+
+            logger.info("✅ All critical tables verified — row counts OK")
+
+        except ValueError:
+            raise  # re-raise blocking failures
+        except Exception as e:
+            logger.warning("Row count verification skipped (BQ unavailable): %s", e)
+
+    verify_counts_task = PythonOperator(
+        task_id="verify_row_counts",
+        python_callable=verify_row_counts,
+        provide_context=True,
+    )
+
+    # ─────────────────────────────────────────────────────────────
     # STAGE 5: Notify success
     # ─────────────────────────────────────────────────────────────
 
@@ -258,11 +333,12 @@ with DAG(
         extract_referentials_task,
     ] >> load_bigquery_task
 
-    # Sequential: Load → dbt deps → dbt build → Validate → Notify
+    # Sequential: Load → dbt deps → dbt build → Verify rows → SLA check → Notify
     (
         load_bigquery_task
         >> dbt_deps_task
         >> dbt_build_task
+        >> verify_counts_task
         >> check_sla_task
         >> notify_success
     )

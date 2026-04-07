@@ -36,6 +36,18 @@ airflow-backfill:  ## Backfill (START_DATE and END_DATE required)
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+# ─────────────────────────────────────────────────────────────
+# REVIEWER ENTRY POINTS (start here if you're new to the project)
+# ─────────────────────────────────────────────────────────────
+
+run: install dbt-build check-sla  ## 🚀 Full pipeline for reviewers: install + dbt build + SLA check (no ingestion)
+	@echo "✅ Pipeline complete. Check Looker Studio for dashboard."
+	@echo "👉 For ingestion: make ingest START_DATE=2024-01-01 END_DATE=2024-01-31"
+	@echo "👉 For docs:      make dbt-docs"
+
+demo: install dbt-build elementary-report  ## 📊 Reviewer demo: build + generate Elementary observability report
+	@echo "✅ Demo complete. Open docs/elementary_report.html for data health report."
+
 setup: install setup-gcp  ## Full installation
 
 install:  ## Install Python dependencies
