@@ -12,6 +12,8 @@
 --
 -- Source: mart_validations_station_daily (pre-joined with coordinates)
 -- Pattern: Kenya — RANK() OVER (PARTITION BY year), Metal — agg_top_songs
+-- NOTE: BigQuery does not allow nesting analytic functions (LAG(RANK() OVER ...))
+--       We compute rank in CTE 1, then LAG in CTE 2.
 
 WITH monthly_station AS (
   SELECT
@@ -26,7 +28,8 @@ WITH monthly_station AS (
   GROUP BY 1, 2, 3, 4, 5, 6
 ),
 
-ranked AS (
+-- Step 1: compute rank per month
+with_rank AS (
   SELECT
     validation_month,
     station_id_zdc,
@@ -35,25 +38,22 @@ ranked AS (
     transport_mode,
     operator,
     monthly_validations,
-
-    -- Network rank this month
     RANK() OVER (
       PARTITION BY validation_month
       ORDER BY monthly_validations DESC
-    ) AS station_rank,
+    ) AS station_rank
+  FROM monthly_station
+),
 
-    -- Previous month rank for comparison
-    LAG(
-      RANK() OVER (
-        PARTITION BY validation_month
-        ORDER BY monthly_validations DESC
-      ), 1
-    ) OVER (
+-- Step 2: LAG on the already-computed rank (BigQuery forbids nesting)
+with_prev_rank AS (
+  SELECT
+    *,
+    LAG(station_rank, 1) OVER (
       PARTITION BY station_id_zdc
       ORDER BY validation_month
     ) AS prev_month_rank
-
-  FROM monthly_station
+  FROM with_rank
 )
 
 SELECT
@@ -72,12 +72,12 @@ SELECT
 
   -- Trend label
   CASE
-    WHEN prev_month_rank IS NULL              THEN 'new_entry'
+    WHEN prev_month_rank IS NULL               THEN 'new_entry'
     WHEN (station_rank - prev_month_rank) < -5 THEN 'rising'
     WHEN (station_rank - prev_month_rank) > 5  THEN 'falling'
-    ELSE                                           'stable'
+    ELSE                                            'stable'
   END AS rank_trend,
 
   CURRENT_TIMESTAMP() AS dbt_updated_at
-FROM ranked
+FROM with_prev_rank
 ORDER BY validation_month, station_rank

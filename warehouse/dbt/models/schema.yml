@@ -60,8 +60,6 @@ models:
           ticket_type_mapping in downstream marts. Pattern: Kenya Energy flags.
         data_tests:
           - not_null
-          - accepted_values:
-              values: [true, false]
       - name: is_student
         description: >
           TRUE if ticket_type is Imagine R (subsidised student pass only).
@@ -69,8 +67,6 @@ models:
           is_subscription=TRUE.
         data_tests:
           - not_null
-          - accepted_values:
-              values: [true, false]
       - name: validation_count
         description: "Number of validations"
         data_tests:

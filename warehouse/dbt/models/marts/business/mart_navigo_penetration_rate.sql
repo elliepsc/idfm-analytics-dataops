@@ -19,9 +19,21 @@ WITH validations_monthly AS (
     DATE_TRUNC(validation_date, MONTH) AS validation_month,
     station_id_zdc,
     stop_name,
-    SUM(validation_count)                                              AS total_validations,
-    SUM(CASE WHEN is_subscription THEN validation_count ELSE 0 END)   AS subscription_validations,
-    SUM(CASE WHEN NOT is_subscription THEN validation_count ELSE 0 END) AS occasional_validations
+    SUM(validation_count)                                                        AS total_validations,
+    -- Recompute is_subscription inline — fct_validations_daily is incremental
+    -- and historical rows may not have the flag until a --full-refresh is run.
+    SUM(
+      CASE
+        WHEN UPPER(TRIM(ticket_type)) IN ('NAVIGO', 'NAVIGO ANNUEL', 'NAVIGO SEMAINE', 'IMAGINE R')
+        THEN validation_count ELSE 0
+      END
+    )                                                                            AS subscription_validations,
+    SUM(
+      CASE
+        WHEN UPPER(TRIM(ticket_type)) NOT IN ('NAVIGO', 'NAVIGO ANNUEL', 'NAVIGO SEMAINE', 'IMAGINE R')
+        THEN validation_count ELSE 0
+      END
+    )                                                                            AS occasional_validations
   FROM {{ ref('fct_validations_daily') }}
   WHERE station_id_zdc IS NOT NULL
   GROUP BY 1, 2, 3
