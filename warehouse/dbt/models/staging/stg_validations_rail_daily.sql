@@ -13,6 +13,8 @@
 -- Line identity is reconstructed in fct_validations_daily via JOIN on dim_stop → dim_line.
 -- FIX V2: field 'date' is already DATE type in BigQuery — PARSE_DATE() only works on STRING.
 -- FIX V2: line_code_trns and line_code_res are INT64 — TRIM() requires STRING, cast first.
+-- V3 3a: added is_subscription and is_student flags (Kenya Energy pattern)
+--   Avoids re-joining ticket_type_mapping seed in every downstream mart.
 
 WITH source AS (
   SELECT * FROM {{ source('raw', 'raw_validations') }}
@@ -38,6 +40,21 @@ cleaned AS (
 
     -- Ticket category
     UPPER(TRIM(ticket_type)) AS ticket_type,
+
+    -- V3 3a: Business flags — computed once at staging to avoid downstream re-joins
+    -- is_subscription: all Navigo subscription types (monthly, annual, weekly, Imagine R)
+    CASE
+      WHEN UPPER(TRIM(ticket_type)) IN (
+        'NAVIGO', 'NAVIGO ANNUEL', 'NAVIGO SEMAINE', 'IMAGINE R'
+      ) THEN TRUE
+      ELSE FALSE
+    END AS is_subscription,
+
+    -- is_student: Imagine R only (subsidised student pass)
+    CASE
+      WHEN UPPER(TRIM(ticket_type)) = 'IMAGINE R' THEN TRUE
+      ELSE FALSE
+    END AS is_student,
 
     -- Metrics
     CAST(validation_count AS INT64) AS validation_count,

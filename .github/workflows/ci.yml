@@ -6,7 +6,10 @@ on:
     branches: [main, develop]
 
 jobs:
-  lint-and-test:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: Python quality — lint + tests (independent)
+  # ─────────────────────────────────────────────────────────────
+  python-quality:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,7 +29,34 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install black flake8 isort sqlfluff pytest pytest-cov
+          pip install black flake8 isort pytest pytest-cov
+
+      - name: Lint Python (black)
+        run: black --check ingestion/ scripts/ orchestration/airflow/dags/ tests/
+
+      - name: Lint Python (isort)
+        run: isort --check-only ingestion/ scripts/ orchestration/airflow/dags/ tests/
+
+      - name: Lint Python (flake8)
+        run: flake8 ingestion/ scripts/ orchestration/airflow/dags/ tests/ --max-line-length=120 --extend-ignore=E203
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --cov=ingestion --cov=scripts --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: Terraform validate (independent)
+  # ─────────────────────────────────────────────────────────────
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -46,23 +76,19 @@ jobs:
           terraform validate
           echo "✅ Terraform config valid"
 
-      - name: Lint Python (black)
-        run: black --check ingestion/ scripts/ orchestration/airflow/dags/ tests/
+  # ─────────────────────────────────────────────────────────────
+  # Job 3: dbt parse (independent — no GCP credentials needed)
+  # ─────────────────────────────────────────────────────────────
+  dbt-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Lint Python (isort)
-        run: isort --check-only ingestion/ scripts/ orchestration/airflow/dags/ tests/
-
-      - name: Lint Python (flake8)
-        run: flake8 ingestion/ scripts/ orchestration/airflow/dags/ tests/ --max-line-length=120 --extend-ignore=E203
-
-      - name: Run unit tests
-        run: pytest tests/unit/ -v --cov=ingestion --cov-report=xml
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          files: ./coverage.xml
-          flags: unittests
+          python-version: '3.11'
 
       - name: Install dbt
         run: pip install dbt-core dbt-bigquery
@@ -75,11 +101,18 @@ jobs:
           cd warehouse/dbt
           cp profile_ci.yml /tmp/profiles.yml
           GCP_PROJECT_ID=dummy-project dbt parse --profiles-dir /tmp --profile transport_ci --target ci
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "✅ Terraform fmt + validate passed"
-          echo "✅ Lint checks passed"
-          echo "✅ Unit tests passed"
           echo "✅ dbt parse successful"
+
+  # ─────────────────────────────────────────────────────────────
+  # Summary — runs after all jobs, always
+  # ─────────────────────────────────────────────────────────────
+  summary:
+    runs-on: ubuntu-latest
+    needs: [python-quality, terraform-validate, dbt-parse]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "python-quality: ${{ needs.python-quality.result }}"
+          echo "terraform-validate: ${{ needs.terraform-validate.result }}"
+          echo "dbt-parse: ${{ needs.dbt-parse.result }}"

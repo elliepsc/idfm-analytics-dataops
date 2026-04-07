@@ -53,7 +53,7 @@ def get_or_create_suite(context):
 
 def validate_validations(data_dir: str = "data/raw") -> bool:
     """Validate rail validation files against GE expectations."""
-    context = gx.get_context(mode="file", project_root_dir="great_expectations")
+    context = gx.get_context(mode="file", project_root_dir="great_expectations")  # type: ignore[attr-defined]
 
     files = sorted(Path(data_dir).glob("validations_*.json"))
     if not files:

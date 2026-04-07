@@ -1,0 +1,9 @@
+transport_mode,priority,color_hex
+RER,1,#e84b22
+METRO,2,#0055a4
+TRANSILIEN,3,#7b3f00
+TRAM,4,#00a86b
+CABLEWAY,5,#9b59b6
+FUNICULAR,6,#f39c12
+BUS,7,#888780
+RAIL,8,#555555

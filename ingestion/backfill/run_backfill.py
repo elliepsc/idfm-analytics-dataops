@@ -255,7 +255,7 @@ def run(
         period   : if set, only process this specific period (e.g. '2023-S1')
         force    : if True, re-process already-loaded sources
     """
-    base_dir = Path(base_dir)
+    base_path = Path(base_dir)
     manifest = load_manifest()
     sources = manifest["sources"]
 
@@ -277,11 +277,11 @@ def run(
 
     logger.info(f"Sources to process: {len(pending)}")
 
-    results = {"success": [], "failed": []}
+    results: dict[str, list] = {"success": [], "failed": []}
 
     for source in pending:
         try:
-            updated_source = process_source(source, base_dir, dry_run=dry_run)
+            updated_source = process_source(source, base_path, dry_run=dry_run)
 
             # Update manifest in memory
             for i, s in enumerate(manifest["sources"]):

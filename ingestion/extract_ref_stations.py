@@ -37,13 +37,13 @@ def extract_ref_stations(output_dir: Path = None) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     url = f"{BASE_URL}/catalog/datasets/{DATASET_ID}/records"
-    params = {
+    params: dict[str, str | int] = {
         "select": "id_ref_zdc,nom_gares,geo_point_2d,mode,exploitant",
         "limit": 100,
         "offset": 0,
     }
 
-    all_records = []
+    all_records: list[dict] = []
     ingestion_ts = datetime.now(timezone.utc).isoformat()
 
     while True:
@@ -71,10 +71,10 @@ def extract_ref_stations(output_dir: Path = None) -> Path:
             )
 
         total = data.get("total_count", 0)
-        params["offset"] += len(results)
+        params["offset"] = int(params["offset"]) + len(results)
         logger.info("Fetched %d / %d stations", len(all_records), total)
 
-        if params["offset"] >= total:
+        if int(params["offset"]) >= int(total):
             break
 
     output_file = output_dir / f"ref_stations_{datetime.now().strftime('%Y%m%d')}.json"

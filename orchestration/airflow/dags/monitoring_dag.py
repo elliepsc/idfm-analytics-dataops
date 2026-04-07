@@ -181,6 +181,7 @@ with DAG(
     default_args=default_args,
     schedule_interval="0 7 * * *",
     catchup=False,
+    max_active_runs=1,
     sla_miss_callback=sla_miss_callback,
     tags=["monitoring", "transport", "v2"],
     doc_md="""
@@ -238,3 +239,36 @@ with DAG(
         >> log_metrics
         >> notify_success
     )
+
+
+# ═════════════════════════════════════════════════════════════════
+# Pipeline Failure Alert
+# ═════════════════════════════════════════════════════════════════
+
+
+def task_failure_alert(context):
+    """Send pipeline failure alert to Slack — separate from z-score anomaly alerts.
+    Pipeline failures → #idfm-pipeline-alerts
+    Z-score anomalies → #idfm-anomaly-alerts (handled in notify_monitoring_success)
+    """
+    try:
+        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+
+        SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+            text=(
+                f"❌ *Monitoring DAG - FAILED*\n\n"
+                f"📅 Date: {context['ds']}\n"
+                f"🔧 Task: {context['task_instance'].task_id}\n"
+                f"⚠️ Error: {context['exception']}\n"
+                f"🔗 Log: {context['task_instance'].log_url}"
+            )
+        )
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("Slack pipeline alert skipped: %s", e)
+
+
+# Apply failure callback to all monitoring tasks
+for task in dag.tasks:
+    task.on_failure_callback = task_failure_alert

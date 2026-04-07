@@ -1,0 +1,14 @@
+line_id,line_name,target_punctuality_rate,operator,notes
+A,RER A,94.0,RATP/SNCF,Objectif contractuel STIF — ligne la plus chargée d'Europe
+B,RER B,91.0,RATP/SNCF,Objectif contractuel STIF
+C,RER C,90.0,SNCF,Objectif contractuel STIF
+D,RER D,90.0,SNCF,Objectif contractuel STIF
+E,RER E,92.0,SNCF,Objectif contractuel STIF
+H,Transilien H,90.0,SNCF,Objectif contractuel STIF
+J,Transilien J,90.0,SNCF,Objectif contractuel STIF
+K,Transilien K,88.0,SNCF,Objectif contractuel STIF — desserte plus rurale
+L,Transilien L,91.0,SNCF,Objectif contractuel STIF
+N,Transilien N,89.0,SNCF,Objectif contractuel STIF
+P,Transilien P,88.0,SNCF,Objectif contractuel STIF — desserte plus rurale
+R,Transilien R,88.0,SNCF,Objectif contractuel STIF — desserte plus rurale
+U,Transilien U,91.0,SNCF,Objectif contractuel STIF

@@ -102,7 +102,10 @@ class ODSv2Client:
         Returns:
             API JSON response
         """
-        params = {"limit": min(limit, 100), "offset": offset}  # API enforces max 100
+        params: dict[str, str | int] = {
+            "limit": min(limit, 100),
+            "offset": offset,
+        }  # API enforces max 100
 
         if where:
             params["where"] = where
@@ -166,7 +169,7 @@ class ODSv2Client:
         Returns:
             List of all records
         """
-        all_records = []
+        all_records: list[dict] = []
         offset = 0
         page_size = 100
         total_count = None

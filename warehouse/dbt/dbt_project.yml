@@ -37,10 +37,9 @@ models:
         +materialized: incremental
         +on_schema_change: "append_new_columns"
         +incremental_strategy: "insert_overwrite"
-        # +partition_by:      # fct models defines when own partitioning, so no longer needed here:
-        #   field: "date"     # fct_validations_daily: field=validation_date, granularity=day & fct_validations_monthly: field=validation_month, granularity=month
-        #   data_type: "date" # does not corresond to the actual data type of the field, but to the granularity of the partitioning (day, month, etc.)
-        #   granularity: "day"
+        # partition_by intentionally omitted here — each fact model defines its own:
+        # fct_validations_daily: field=validation_date, granularity=day
+        # fct_punctuality_monthly: field=month_date, granularity=month
 
     marts:
       +materialized: table
@@ -75,4 +74,16 @@ seeds:
         stop_name: string
         latitude: float
         longitude: float
+    line_punctuality_target:
+      +column_types:
+        line_id: string
+        line_name: string
+        target_punctuality_rate: float
+        operator: string
+        notes: string
+    transport_mode_priority:
+      +column_types:
+        transport_mode: string
+        priority: integer
+        color_hex: string
 

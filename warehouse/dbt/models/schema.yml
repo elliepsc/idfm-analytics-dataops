@@ -53,6 +53,24 @@ models:
         description: "Ticket category (normalized UPPER)"
         data_tests:
           - not_null
+      - name: is_subscription
+        description: >
+          TRUE if ticket_type is a subscription pass (Navigo, Navigo Annuel,
+          Navigo Semaine, Imagine R). Computed at staging to avoid re-joining
+          ticket_type_mapping in downstream marts. Pattern: Kenya Energy flags.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      - name: is_student
+        description: >
+          TRUE if ticket_type is Imagine R (subsidised student pass only).
+          Subset of is_subscription. All is_student=TRUE rows also have
+          is_subscription=TRUE.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       - name: validation_count
         description: "Number of validations"
         data_tests:
@@ -562,3 +580,23 @@ models:
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
+
+macros:
+  - name: usage_profile
+    description: >
+      V3 3b — Behavioural segmentation macro (Bikeshare pickup_type pattern).
+      Classifies each validation into a usage profile based on ticket_type
+      and day_of_week. Centralises logic to avoid CASE WHEN duplication in
+      downstream marts.
+
+      Segments: commuter_weekday (subscription Mon-Fri) | student (Imagine R)
+      | casual_visitor (T+, Navigo Jour, Navigo Easy) | other.
+
+      day_of_week: BigQuery DAYOFWEEK convention (1=Sunday, 2=Monday, 6=Friday).
+    arguments:
+      - name: ticket_type_column
+        type: string
+        description: "Column reference for ticket_type (already UPPER/TRIM in staging)"
+      - name: day_of_week_column
+        type: integer
+        description: "Column reference for day_of_week (BigQuery DAYOFWEEK 1-7)"
