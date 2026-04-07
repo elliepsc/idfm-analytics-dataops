@@ -70,7 +70,22 @@ SELECT
     WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours        THEN 1
     WHEN COALESCE(t.freshness_hours, 9999) <= sla.sla_hours * 1.2  THEN 2
     ELSE 3
-  END AS sla_status_order
+  END AS sla_status_order,
+
+  -- V3 3o: anomaly_source — distinguishes pipeline anomalies from business anomalies
+  -- pipeline: technical issues (freshness breach, missing data, SLA violation)
+  -- business: genuine network signal (volume deviation detected by z-score in monitoring_dag)
+  -- This separation prevents mixing infrastructure alerts with operational insights.
+  -- z-score anomalies are logged separately in dag_metrics — see mart_anomaly_history.
+  CASE
+    WHEN COALESCE(t.row_count, 0) = 0
+      THEN 'pipeline'      -- missing data = pipeline issue
+    WHEN COALESCE(t.freshness_hours, 9999) > sla.sla_hours * 1.2
+      THEN 'pipeline'      -- critical freshness breach = pipeline issue
+    WHEN COALESCE(t.freshness_hours, 9999) > sla.sla_hours
+      THEN 'pipeline'      -- SLA breach = pipeline issue
+    ELSE 'ok'              -- within SLA = no anomaly (business anomalies tracked in mart_anomaly_history)
+  END AS anomaly_source
 
 FROM sla_config sla
 LEFT JOIN table_stats t ON sla.table_name = t.table_name
