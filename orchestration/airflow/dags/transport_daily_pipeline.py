@@ -76,21 +76,38 @@ def extract_punctuality(**context):
 
 
 def extract_referentials(**context):
-    """Extract reference data: stops and lines.
-    NOTE V2: ref_stop_lines removed — arrets-lignes has no line_id field and is
-    capped at 10,000/73,264 records. See TODO V4 in apis.yml for GTFS alternative.
+    """Extract reference data: stops, lines, and stop-to-line mapping (GTFS).
+
+    V4: ref_stop_lines is now extracted from the IDFM GTFS feed
+    (offre-horaires-tc-gtfs-idfm) instead of the arrets-lignes ODS API
+    which has no line_id field and is capped at 10,000/73,264 records.
+
+    GTFS join: stop_times.trip_id → trips.trip_id → trips.route_id (= line_id)
+    This populates stg_ref_stop_lines and unblocks mart_line_demand_vs_punctuality.
     """
     import sys
 
     sys.path.insert(0, "/opt/airflow/ingestion")
     from extract_ref_lines import extract_ref_lines
+    from extract_ref_stop_lines import extract_ref_stop_lines
     from extract_ref_stops import extract_ref_stops
 
     output_dir = "/opt/airflow/data/bronze/referentials"
     extract_ref_stops(output_dir=output_dir)
     extract_ref_lines(output_dir=output_dir)
 
-    print("✅ Reference data extracted (stops, lines)")
+    # GTFS extraction — requires IDFM_API_KEY env var
+    # If the key is missing or the download fails, log a warning and continue.
+    # The pipeline must not fail because of a missing stop_lines refresh —
+    # the existing BigQuery table remains valid from the last successful run.
+    try:
+        extract_ref_stop_lines(output_dir=output_dir)
+        print("✅ Reference data extracted (stops, lines, stop_lines GTFS)")
+    except Exception as e:
+        print(
+            f"⚠️  GTFS stop_lines extraction failed: {e}. "
+            "Continuing with existing raw_ref_stop_lines in BigQuery."
+        )
 
 
 def load_to_bigquery(**context):

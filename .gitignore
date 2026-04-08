@@ -101,6 +101,8 @@ warehouse/dbt/dbt_internal_packages_data/
 .github/workflows/README_CICD.md
 .github/workflows/README_WIF.md
 terraform/README_TERRAFORM.md
+warehouse/dbt/README_DBT.md
+warehouse/dbt/models/staging/MIGRATION_NOTE.md
 
 
 

@@ -47,17 +47,22 @@ idfm:
         transport_mode: "transportmode"
         operator: "operatorname"
     # -------------------------------------------------------------------------
-    # STOP-LINE MAPPING (join table) — DISABLED V2
-    # ⚠️  arrets-lignes does not contain a usable line_id field.
-    # ⚠️  Dataset capped at 10,000 records out of 73,264 available.
-    # TODO V4: implement via IDFM GTFS feed (stops.txt + routes.txt + stop_times.txt)
-    #          https://data.iledefrance-mobilites.fr/explore/dataset/offre-horaires-tc-gtfs-idfm
+    # STOP-LINE MAPPING (join table) — V4 GTFS implementation
+    # Source: IDFM GTFS feed (offre-horaires-tc-gtfs-idfm)
+    # Extractor: ingestion/extract_ref_stop_lines.py
+    # GTFS join: stop_times.trip_id → trips.trip_id → trips.route_id (= line_id)
+    # Requires: IDFM_API_KEY env var for authenticated download
+    # Output: raw_ref_stop_lines in BigQuery (WRITE_TRUNCATE — full snapshot)
+    # Unblocks: mart_line_demand_vs_punctuality (was returning 0 rows)
+    #
+    # Previous approach (DISABLED V2): arrets-lignes ODS API had no line_id
+    # field and was capped at 10,000/73,264 records.
     # -------------------------------------------------------------------------
-    # ref_stop_lines:
-    #   id: "arrets-lignes"
-    #   fields:
-    #     stop_id: "stop_id"
-    #     line_id: "line_id"
+    ref_stop_lines_gtfs:
+      url: "https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/offre-horaires-tc-gtfs-idfm/exports/files"
+      files_used:
+        - trips.txt      # trip_id → route_id (= line_id)
+        - stop_times.txt # stop_id × trip_id → derive stop_id × line_id
 
 transilien:
   base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
