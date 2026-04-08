@@ -49,10 +49,6 @@ models:
       monitoring:
         +materialized: table
 
-  elementary:
-    +schema: elementary
-    +materialized: table
-
 vars:
   # Dev date filters — used in incremental fact models to limit BQ scan in dev
   # (avoids full 4.1M row scan on every dbt build --target dev)

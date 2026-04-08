@@ -238,15 +238,28 @@ with DAG(
 
     # ─────────────────────────────────────────────────────────────
     # STAGE 3: Transform with dbt (full refresh)
+    # dbt_deps is isolated to avoid Elementary race condition on
+    # on-run-start hook ('elementary' is undefined at attempt=1
+    # when deps and build run in the same bash command).
     # ─────────────────────────────────────────────────────────────
+
+    dbt_deps_task = BashOperator(
+        task_id="dbt_deps",
+        bash_command="cd /opt/airflow/warehouse/dbt && /home/airflow/.local/bin/dbt deps",
+        retries=0,  # deps failure = real network/package issue, don't mask it
+        env={
+            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
+        },
+    )
 
     dbt_build_task = BashOperator(
         task_id="dbt_build_full_refresh",
         bash_command="""
             cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt deps && \
             /home/airflow/.local/bin/dbt build --target prod --full-refresh
         """,
+        retries=1,
+        retry_delay=timedelta(minutes=2),
         env={
             "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
             "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
@@ -299,8 +312,8 @@ with DAG(
         extract_referentials_task,
     ] >> load_bigquery_task
 
-    # Sequential: Load → Transform → Validate → Notify
-    load_bigquery_task >> dbt_build_task >> validate_task >> notify_success
+    # Sequential: Load → Deps → Build → Validate → Notify
+    load_bigquery_task >> dbt_deps_task >> dbt_build_task >> validate_task >> notify_success
 
 
 # ═════════════════════════════════════════════════════════════════
