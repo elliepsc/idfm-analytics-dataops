@@ -23,7 +23,9 @@ def check_sla():
     dataset = os.getenv("BQ_DATASET_ANALYTICS", "transport_analytics")
     table = f"{project_id}.{dataset}.fct_data_health_daily"
 
-    client = bigquery.Client(project=project_id, location=os.getenv("BQ_LOCATION", "europe-west1"))
+    client = bigquery.Client(
+        project=project_id, location=os.getenv("BQ_LOCATION", "europe-west1")
+    )
 
     # Query to detect breaches for the last 2 days
     query = f"""
