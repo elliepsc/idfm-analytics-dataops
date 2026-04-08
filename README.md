@@ -100,14 +100,14 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
                       ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │              SILVER — Staging Layer                              │
-│            BigQuery: transport_staging_staging                   │
+│            BigQuery: transport_staging                          │
 │      stg_validations · stg_punctuality · stg_ref_stops/lines     │
 └─────────────────────┬────────────────────────────────────────────┘
                       │ dbt core + marts models
                       ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │               GOLD — Analytics Layer                             │
-│     BigQuery: transport_staging_core · transport_staging_analytics│
+│     BigQuery: transport_core · transport_analytics              │
 │   dim_stop · dim_line · dim_date · dim_ticket_type               │
 │   fct_validations_daily (partitioned by date · clustered)        │
 │   fct_punctuality_monthly · mart_network_scorecard_monthly       │
@@ -237,11 +237,11 @@ python ingestion/backfill/run_backfill.py --period 2024-T4 --force
 | Dataset | Layer | Environment | Content |
 |---------|-------|-------------|---------|
 | `transport_raw` | Bronze | Prod | Raw data from APIs and backfill |
-| `transport_staging_staging` | Silver | Prod | Cleaned, typed, renamed views |
-| `transport_staging_core` | Gold | Prod | Dimensions + Facts (Airflow writes here) |
-| `transport_staging_analytics` | Gold | Prod | Marts + Metrics (Looker Studio source) |
+| `transport_staging` | Silver | Prod | Cleaned, typed, renamed views |
+| `transport_core` | Gold | Prod | Dimensions + Facts (Airflow writes here) |
+| `transport_analytics` | Gold | Prod | Marts + Metrics (Looker Studio source) |
 | `transport_snapshots` | — | Prod | SCD Type 2 historization |
-| `transport_staging_dev_*` | All layers | Dev | Local development only — see Dev/Prod section |
+| `transport_dev_*` | All layers | Dev | Local development only — see Dev/Prod section |
 
 All datasets are provisioned and managed by Terraform (`terraform/bigquery.tf`).
 
@@ -382,7 +382,7 @@ dbt documentation with full lineage DAG: https://elliepsc.github.io/idfm-analyti
 
 > 🔗 **[Looker Studio Dashboard](https://lookerstudio.google.com/reporting/153588f1-5147-4a92-8a81-f74c7dec8bf4)**
 
-4-page interactive dashboard built on BigQuery Gold layer tables. All sources point to `transport_staging_core` and `transport_staging_analytics`.
+4-page interactive dashboard built on BigQuery Gold layer tables. All sources point to `transport_core` and `transport_analytics`.
 
 | Page | Title | Key questions answered |
 |------|-------|----------------------|
@@ -454,9 +454,9 @@ terraform init
 # Import existing datasets into Terraform state
 terraform import google_bigquery_dataset.transport_raw YOUR_PROJECT_ID/transport_raw
 terraform import google_bigquery_dataset.transport_snapshots YOUR_PROJECT_ID/transport_snapshots
-terraform import google_bigquery_dataset.transport_staging_staging YOUR_PROJECT_ID/transport_staging_staging
-terraform import google_bigquery_dataset.transport_staging_core YOUR_PROJECT_ID/transport_staging_core
-terraform import google_bigquery_dataset.transport_staging_analytics YOUR_PROJECT_ID/transport_staging_analytics
+terraform import google_bigquery_dataset.transport_staging YOUR_PROJECT_ID/transport_staging
+terraform import google_bigquery_dataset.transport_core YOUR_PROJECT_ID/transport_core
+terraform import google_bigquery_dataset.transport_analytics YOUR_PROJECT_ID/transport_analytics
 
 # Then apply to sync labels and descriptions
 terraform apply
@@ -484,6 +484,8 @@ cd orchestration/airflow
 docker compose up -d
 # UI: http://localhost:8081  (admin / admin)
 ```
+
+> ⚙️ After starting Airflow, configure the required UI variables (Admin → Variables). See [SETUP.md — Airflow UI Variables](SETUP.md#step-4--airflow-ui-variables) for the full list.
 
 ### 7. Run historical backfill
 
@@ -522,8 +524,8 @@ This project separates development (local WSL) and production (Airflow DAGs) usi
 
 | Environment | Base dataset | Example dbt output |
 |-------------|-------------|-------------------|
-| **Prod** | `transport_staging` | `transport_staging_core`, `transport_staging_analytics` |
-| **Dev** | `transport_staging_dev` | `transport_staging_dev_core`, `transport_staging_dev_analytics` |
+| **Prod** | `transport` | `transport_core`, `transport_analytics` |
+| **Dev** | `transport_dev` | `transport_dev_core`, `transport_dev_analytics` |
 
 ### profiles.yml
 
@@ -535,7 +537,7 @@ transport:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: transport_staging_dev   # writes to transport_staging_dev_*
+      dataset: transport_dev   # writes to transport_dev_*
       threads: 4
       location: europe-west1
 
@@ -543,7 +545,7 @@ transport:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}"
+      dataset: "{{ env_var('BQ_DATASET_BASE', 'transport') }}"
       location: europe-west1
       threads: 8
 ```
@@ -651,14 +653,14 @@ flowchart TD
     end
 
     %% Silver
-    subgraph SILVER["🥈 SILVER — transport_staging_staging"]
+    subgraph SILVER["🥈 SILVER — transport_staging"]
         SV[stg_validations_rail_daily]
         SP[stg_punctuality_monthly]
         SR[stg_ref_stops\nstg_ref_lines]
     end
 
     %% Gold Core
-    subgraph CORE["🥇 GOLD CORE — transport_staging_core"]
+    subgraph CORE["🥇 GOLD CORE — transport_core"]
         DS[(dim_stop\n8.7k stops)]
         DL[(dim_line\n2.1k lines)]
         DD[(dim_date)]
@@ -669,7 +671,7 @@ flowchart TD
     end
 
     %% Gold Analytics
-    subgraph ANALYTICS["🥇 GOLD ANALYTICS — transport_staging_analytics"]
+    subgraph ANALYTICS["🥇 GOLD ANALYTICS — transport_analytics"]
         MN[(mart_network_scorecard_monthly)]
         FH[(fct_data_health_daily\nSLA monitoring)]
         MT[(metrics_*\nall_metrics)]
@@ -754,7 +756,7 @@ The original IDFM URL is a rolling dataset now serving 2025 data. The GCS archiv
 Line codes in validations don't match the reference dataset at source. Blocking on a source issue would be counterproductive — `warn` monitors without blocking.
 
 **Why separate prod and dev datasets in BigQuery?**
-Prevents accidental writes to production tables during local development. The dev datasets (`transport_staging_dev_*`) are identical in structure to prod but isolated — dbt `--target dev` writes there, Airflow always uses `--target prod`.
+Prevents accidental writes to production tables during local development. The dev datasets (`transport_dev_*`) are identical in structure to prod but isolated — dbt `--target dev` writes there, Airflow always uses `--target prod`.
 
 **Why Terraform import instead of recreate?**
 BigQuery datasets created outside of Terraform (by dbt or manually) already contain data. Deleting and recreating them would lose all tables. `terraform import` adopts existing resources into the Terraform state without touching their contents.

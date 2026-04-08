@@ -77,8 +77,8 @@ Required values in `.env`:
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_REGION=europe-west1
 BQ_DATASET_RAW=transport_raw
-BQ_DATASET_STAGING=transport_staging
-BQ_DATASET_ANALYTICS=transport_staging_analytics
+BQ_DATASET_BASE=transport
+BQ_DATASET_ANALYTICS=transport_analytics
 ```
 
 ### Step 4 — Add the load-idfm-env alias (recommended)
@@ -176,9 +176,9 @@ Three profiles in `warehouse/dbt/profiles.yml`:
 
 | Profile | Target | Dataset | Usage |
 |---|---|---|---|
-| `transport` | `dev` | `transport_staging_dev_*` | Local development |
-| `transport` | `prod` | `transport_staging_*` | Production |
-| `elementary` | `default` | `transport_staging_elementary` | `edr report` CLI |
+| `transport` | `dev` | `transport_dev_*` | Local development |
+| `transport` | `prod` | `transport_*` | Production |
+| `elementary` | `default` | `transport_elementary` | `edr report` CLI |
 
 Run dbt locally (dev target):
 ```bash
@@ -221,8 +221,19 @@ Airflow reads from `orchestration/airflow/.env`. Copy the template:
 
 ```bash
 cp orchestration/airflow/.env.example orchestration/airflow/.env
-# Fill in GCP_PROJECT_ID and BQ_DATASET_ANALYTICS
+# Fill in GCP_PROJECT_ID and BQ_DATASET_BASE
 ```
+
+### Step 4 — Airflow UI Variables
+
+In the Airflow UI → **Admin → Variables**, add the following variables:
+
+| Key | Value | Description |
+|-----|-------|-------------|
+| `BQ_DATASET_BASE` | `transport` | Base name for BigQuery schemas. dbt generates `transport_core`, `transport_analytics`, `transport_staging` from this. |
+| `gcp_credentials_path` | `/opt/airflow/credentials/gcp-key.json` | Path to GCP credentials inside the Airflow container. |
+
+> **Why not `.env` for these?** Airflow variables (Admin → Variables) are stored in the Airflow metadata DB and available to all DAGs via `Variable.get()` or `os.getenv()`. They persist across container restarts — unlike `.env` which is loaded at container startup only.
 
 ---
 
@@ -244,7 +255,7 @@ load-idfm-env
 dbt run --select elementary --target prod
 ```
 
-This creates 29 tables in `transport_staging_elementary` dataset.
+This creates 29 tables in `transport_elementary` dataset.
 
 ### Step 3 — Generate observability report
 
