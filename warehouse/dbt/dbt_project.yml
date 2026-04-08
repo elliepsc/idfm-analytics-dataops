@@ -4,6 +4,12 @@ config-version: 2
 
 flags:
   require_explicit_package_overrides_for_builtin_materializations: false
+  # Suppress MissingArgumentsPropertyInGenericTestDeprecation for custom macros
+  # (assert_valid_date_range, assert_positive_values) that use direct kwargs —
+  # not the dbt 1.9+ 'arguments:' property pattern. Remove when macros are migrated.
+  warn_error_options:
+    silence:
+      - MissingArgumentsPropertyInGenericTestDeprecation
 
 profile: 'transport'
 

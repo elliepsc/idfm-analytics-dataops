@@ -12,8 +12,7 @@ models:
         data_tests:
           - not_null
           - assert_valid_date_range:
-              arguments:
-                min_date: '2020-01-01'
+              min_date: '2020-01-01'
       - name: validation_month
         description: "Validation month (DATE_TRUNC MONTH)"
         data_tests:
@@ -88,8 +87,7 @@ models:
         data_tests:
           - not_null
           - assert_valid_date_range:
-              arguments:
-                min_date: '2020-01-01'
+              min_date: '2020-01-01'
       - name: line_id
         description: "Line identifier"
         data_tests:
@@ -231,8 +229,7 @@ models:
         data_tests:
           - not_null
           - assert_valid_date_range:
-              arguments:
-                min_date: '2020-01-01'
+              min_date: '2020-01-01'
       - name: validation_month
         description: "Validation month (DATE_TRUNC MONTH)"
         data_tests:
@@ -377,8 +374,7 @@ models:
         data_tests:
           - not_null
           - assert_valid_date_range:
-              arguments:
-                min_date: '2020-01-01'
+              min_date: '2020-01-01'
       - name: line_id
         description: "FK -> dim_line (WARN: 156 Transilien lines unresolved)"
         data_tests:
@@ -426,8 +422,7 @@ models:
         data_tests:
           - not_null
           - assert_valid_date_range:
-              arguments:
-                min_date: '2020-01-01'
+              min_date: '2020-01-01'
       - name: line_id
         description: "Line identifier"
         data_tests:
