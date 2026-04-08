@@ -258,9 +258,7 @@ with DAG(
 
         project_id = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
         dataset_core = os.getenv("BQ_DATASET_BASE", "transport") + "_core"
-        dataset_analytics = (
-            os.getenv("BQ_DATASET_BASE", "transport") + "_analytics"
-        )
+        dataset_analytics = os.getenv("BQ_DATASET_BASE", "transport") + "_analytics"
 
         # Tables that MUST have rows after a successful dbt build
         critical_tables = [

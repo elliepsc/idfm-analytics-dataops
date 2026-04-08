@@ -313,7 +313,13 @@ with DAG(
     ] >> load_bigquery_task
 
     # Sequential: Load → Deps → Build → Validate → Notify
-    load_bigquery_task >> dbt_deps_task >> dbt_build_task >> validate_task >> notify_success
+    (
+        load_bigquery_task
+        >> dbt_deps_task
+        >> dbt_build_task
+        >> validate_task
+        >> notify_success
+    )
 
 
 # ═════════════════════════════════════════════════════════════════

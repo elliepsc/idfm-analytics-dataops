@@ -97,8 +97,7 @@ def parse_csv_from_zip(zip_bytes: bytes, filename: str) -> list[dict]:
 
         if target is None:
             raise FileNotFoundError(
-                f"{filename} not found in GTFS zip. "
-                f"Available files: {available}"
+                f"{filename} not found in GTFS zip. " f"Available files: {available}"
             )
 
         logger.info(f"Parsing {target} from GTFS zip")
@@ -164,7 +163,14 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
     Returns path to the output JSON file.
     """
     if output_dir is None:
-        output_dir = PROJECT_ROOT / "orchestration" / "airflow" / "data" / "bronze" / "referentials"
+        output_dir = (
+            PROJECT_ROOT
+            / "orchestration"
+            / "airflow"
+            / "data"
+            / "bronze"
+            / "referentials"
+        )
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -203,7 +209,10 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
         for p in pairs
     ]
 
-    output_path = output_dir / f"ref_stop_lines_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.json"
+    output_path = (
+        output_dir
+        / f"ref_stop_lines_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.json"
+    )
     with open(output_path, "w", encoding="utf-8") as f:
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
