@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
 DATASET_RAW = os.getenv("BQ_DATASET_RAW", "transport_raw")
-DATASET_CORE = os.getenv("BQ_DATASET_CORE", "transport_staging_core")
+DATASET_CORE = os.getenv("BQ_DATASET_CORE", "transport_core")
 
 # Z-score threshold — flag as anomaly if |z| > 2.5
 # Corresponds to ~1.2% false positive rate (normal distribution)

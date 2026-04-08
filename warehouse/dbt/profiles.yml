@@ -5,7 +5,7 @@ transport:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: transport_staging_dev
+      dataset: transport_dev
       threads: 4
       timeout_seconds: 300
       location: europe-west1
@@ -14,7 +14,15 @@ transport:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}"
+      # P2-B: changed from BQ_DATASET_STAGING (transport_staging) to BQ_DATASET_BASE (transport).
+      # With generate_schema_name, this produces clean schema names:
+      #   transport_staging   (was transport_staging_staging)
+      #   transport_core      (was transport_staging_core)
+      #   transport_analytics (was transport_staging_analytics)
+      # Required: set BQ_DATASET_BASE=transport in Airflow env and .env
+      # Migration: dbt build --full-refresh, then re-point Looker Studio datasources,
+      #            then drop old datasets in BigQuery.
+      dataset: "{{ env_var('BQ_DATASET_BASE', 'transport') }}"
       location: europe-west1
       threads: 8
       timeout_seconds: 600
@@ -26,6 +34,6 @@ elementary:
       type: bigquery
       method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('BQ_DATASET_STAGING', 'transport_staging') }}_elementary"
+      dataset: "{{ env_var('BQ_DATASET_BASE', 'transport') }}_elementary"
       threads: 8
       location: europe-west1

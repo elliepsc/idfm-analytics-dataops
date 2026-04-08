@@ -18,8 +18,8 @@ x-airflow-common:
     # GCP variables — loaded from ../../.env via env_file above
     GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     BQ_DATASET_RAW: ${BQ_DATASET_RAW:-transport_raw}
-    BQ_DATASET_STAGING: ${BQ_DATASET_STAGING:-transport_staging}
-    BQ_DATASET_ANALYTICS: transport_staging_analytics
+    BQ_DATASET_BASE: ${BQ_DATASET_BASE:-transport}
+    BQ_DATASET_ANALYTICS: transport_analytics
     GOOGLE_CLOUD_PROJECT: ${GCP_PROJECT_ID}
   volumes:
     - ./dags:/opt/airflow/dags

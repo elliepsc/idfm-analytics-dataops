@@ -60,7 +60,7 @@ This is a complete end-to-end data engineering project that:
 6. **Provisions** all infrastructure with Terraform (IaC) — 5 prod datasets + 4 dev datasets
 7. **Exposes** KPIs in a Looker Studio dashboard
 
-Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data (~2.3M rows) into BigQuery, giving the dashboard meaningful multi-year trends from day one.
+Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data (~2.3M rows) into BigQuery. Combined with daily pipeline ingestion, the fact table now holds 4.1M+ rows with ongoing daily growth.
 
 ---
 
@@ -87,7 +87,7 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
 ┌──────────────────────────────────────────────────────────────────┐
 │                         IDFM APIs                                │
 │   API Validations · API Ponctualité · API Référentiels           │
-│   + Historical backfill (2023–2025, ~2.3M rows)                  │
+│   + Historical backfill (2023–2025, ~2.3M rows initial)                  │
 └─────────────────────┬────────────────────────────────────────────┘
                       │ Python (pagination, retry, rate limiting)
                       ▼
@@ -207,7 +207,7 @@ A **manifest-driven backfill module** loaded 2023–2025 historical data into Bi
 | 2024 T3 (Jul–Sep) | ~400k | Dynamic ZIP URL — resolved from IDFM catalog API at runtime |
 | 2024 T4 (Oct–Dec) | 469k | Public GCS snapshot (`gs://idfm-backfill-sources`) |
 | 2025 recent | 477k | Direct CSV from IDFM rolling dataset |
-| **Total** | **~2.3M** | |
+| **Total** | **~2.3M** | Backfill initial — `fct_validations_daily` now at **4.1M+** rows via daily pipeline |
 
 ### Key Design Decisions
 
@@ -221,7 +221,7 @@ A **manifest-driven backfill module** loaded 2023–2025 historical data into Bi
 # Dry-run first — parse all files, no BigQuery writes
 python ingestion/backfill/run_backfill.py --dry-run
 
-# Full backfill (~2.3M rows, ~10 min)
+# Full backfill (~2.3M rows initial, ~10 min)
 python ingestion/backfill/run_backfill.py --base-dir "/path/to/downloads"
 
 # Single period
@@ -493,7 +493,7 @@ source venv/bin/activate
 # Validate first (no BQ writes)
 python ingestion/backfill/run_backfill.py --dry-run
 
-# Load all periods (~2.3M rows)
+# Load all periods (~2.3M rows initial)
 python ingestion/backfill/run_backfill.py --base-dir "/path/to/downloads"
 ```
 
@@ -625,7 +625,7 @@ flowchart TD
     API1([IDFM Validations API\n~15k records/day])
     API2([IDFM Punctuality API\n156 records/month])
     API3([IDFM Referentials API\n~73k stops & lines])
-    BKF([Historical Backfill\n2023-2025 · ~2.3M rows])
+    BKF([Historical Backfill\n2023-2025 · ~2.3M rows initial\n+ 4.1M+ total in prod])
 
     %% Ingestion
     subgraph INGESTION["🐍 Python Ingestion Layer"]

@@ -152,7 +152,7 @@ def check_punctuality_freshness(
 def check_statistical_anomaly(
     project_id: str,
     execution_date: str,
-    dataset_core: str = "transport_staging_core",
+    dataset_core: str = "transport_core",
     z_score_threshold: float = 2.5,
     lookback_days: int = 7,
 ) -> dict:

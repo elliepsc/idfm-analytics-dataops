@@ -264,8 +264,8 @@ with DAG(
             "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
             "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
             "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_STAGING": "transport_staging",
-            "BQ_DATASET_ANALYTICS": "transport_staging_analytics",
+            "BQ_DATASET_BASE": "transport",
+            "BQ_DATASET_ANALYTICS": "transport_analytics",
         },
     )
 
@@ -313,13 +313,7 @@ with DAG(
     ] >> load_bigquery_task
 
     # Sequential: Load → Deps → Build → Validate → Notify
-    (
-        load_bigquery_task
-        >> dbt_deps_task
-        >> dbt_build_task
-        >> validate_task
-        >> notify_success
-    )
+    load_bigquery_task >> dbt_deps_task >> dbt_build_task >> validate_task >> notify_success
 
 
 # ═════════════════════════════════════════════════════════════════
