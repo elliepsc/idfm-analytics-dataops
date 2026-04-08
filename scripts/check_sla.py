@@ -20,10 +20,10 @@ def check_sla():
     Returns exit code 1 if a breach is detected, 0 otherwise
     """
     project_id = os.getenv("GCP_PROJECT_ID")
-    dataset = os.getenv("BQ_DATASET_ANALYTICS", "transport_staging_analytics")
+    dataset = os.getenv("BQ_DATASET_ANALYTICS", "transport_analytics")
     table = f"{project_id}.{dataset}.fct_data_health_daily"
 
-    client = bigquery.Client(project=project_id)
+    client = bigquery.Client(project=project_id, location=os.getenv("BQ_LOCATION", "europe-west1"))
 
     # Query to detect breaches for the last 2 days
     query = f"""
