@@ -5,4 +5,4 @@ packages:
     version: 0.15.0
   - package: elementary-data/elementary
     version: 0.23.0
-sha1_hash: regenerate-on-next-dbt-deps
+sha1_hash: 3699973fe8ace49b545bfb9dae2b423edafc9600
