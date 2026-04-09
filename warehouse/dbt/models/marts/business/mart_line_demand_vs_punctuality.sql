@@ -27,21 +27,19 @@
 -- Pattern: interpretive analytics — 3 explicit business hypotheses
 
 WITH validations_by_line AS (
-  -- Aggregate validations to line level via stop → line mapping
-  -- Join path: fct_validations_daily.stop_id (STIF code)
-  --          → stg_ref_stop_id_mapping.stif_stop_code → idfm_stop_id
-  --          → stg_ref_stop_lines.stop_id (IDFM) → line_id
-  -- Coverage: ~98.3% of validation rows (TN_PA mapping, 528 STIF codes)
+  -- Aggregate validations to line level via line_code_res → line_code_mapping seed
+  -- Bridge: fct_validations_daily.line_code_res → line_code_mapping.line_code_res
+  --       → line_code_mapping.line_shortname → fct_punctuality_monthly.line_id
+  -- Coverage: 10 RER/Transilien lines (SNCF open data only, no RATP metro)
+  -- line_code_trns 800/810 = network codes; line_code_res = individual line codes
   SELECT
     DATE_TRUNC(f.validation_date, MONTH) AS validation_month,
-    sl.line_id,
-    SUM(f.validation_count)              AS line_validations
+    m.line_shortname                      AS line_id,
+    SUM(f.validation_count)               AS line_validations
   FROM {{ ref('fct_validations_daily') }} f
-  INNER JOIN {{ ref('stg_ref_stop_id_mapping') }} m
-    ON f.stop_id = m.stif_stop_code
-  INNER JOIN {{ ref('stg_ref_stop_lines') }} sl
-    ON m.idfm_stop_id = sl.stop_id
-  WHERE f.stop_id != '<NA>'
+  INNER JOIN {{ ref('line_code_mapping') }} m
+    ON f.line_code_res = m.line_code_res
+  WHERE f.line_code_res != '<NA>'
   GROUP BY 1, 2
 ),
 

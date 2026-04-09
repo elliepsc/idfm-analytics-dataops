@@ -4,7 +4,11 @@ config-version: 2
 
 flags:
   require_explicit_package_overrides_for_builtin_materializations: false
-  # (assert_valid_date_range, assert_positive_values) that use direct kwargs —
+  # Note: MissingArgumentsPropertyInGenericTestDeprecation warning appears in dbt 1.9+
+  # for custom macros (assert_valid_date_range, assert_positive_values) that use direct
+  # kwargs instead of the new 'arguments:' property pattern.
+  # warn_error_options.silence is only available in dbt 1.9+ — not used here.
+  # The warning is cosmetic only and does not affect test execution.
 
 profile: 'transport'
 
@@ -65,6 +69,14 @@ seeds:
         ticket_type_label: string
         category: string
         is_navigo: boolean
+    line_code_mapping:
+      +column_types:
+        line_code_res: string
+        line_shortname: string
+        line_id_idfm: string
+        transport_mode: string
+        operator: string
+        notes: string
     stop_coordinates_complement:
       +column_types:
         station_id_zdc: integer

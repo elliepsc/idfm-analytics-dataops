@@ -1,0 +1,11 @@
+line_code_res,line_shortname,line_id_idfm,transport_mode,operator,notes
+801,A,C01742,RAIL,SNCF,RER A - SNCF portion (CDG-Etoile-Lyon-Cergy/Marne)
+802,B,C01743,RAIL,SNCF,RER B - SNCF portion (CDG-Luxembourg-Massy)
+803,C,C01727,RAIL,SNCF,RER C - Austerlitz-Javel-Versailles RG-Etampes
+804,D,C01728,RAIL,SNCF,RER D - Gare de Lyon-Melun-Stade de France
+805,E,C01729,RAIL,SNCF,RER E - Haussmann-Rosa Parks-Tournan
+850,P,C01730,RAIL,SNCF,Transilien P - Gare de l'Est-Meaux/Provins
+851,R,C01731,RAIL,SNCF,Transilien R - Bercy-Fontainebleau/Montereau
+852,N,C01736,RAIL,SNCF,Transilien N - Montparnasse-Versailles CH/Rambouillet
+853,H,C01737,RAIL,SNCF,Transilien H - Gare du Nord-Pontoise/Persan
+854,L,C01740,RAIL,SNCF,Transilien L - Saint-Lazare-Versailles RD/Mantes
