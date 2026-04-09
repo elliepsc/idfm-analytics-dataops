@@ -150,7 +150,8 @@ def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
 
                 if count % 1_000_000 == 0:
                     logger.info(
-                        f"  {count:,} rows processed, " f"{len(pairs):,} pairs so far"
+                        f"  {count:,} rows processed, "
+                        f"{len(pairs):,} pairs so far"
                     )
 
     logger.info(
@@ -214,9 +215,10 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     output_path = output_dir / f"ref_stop_lines_{timestamp}.json"
 
+    # Write as JSON array — consistent with all other extractors in this project.
+    # load_bigquery_raw.py expects [{...}, {...}] format (converted to NDJSON in memory).
     with open(output_path, "w", encoding="utf-8") as f:
-        for record in records:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        json.dump(records, f, indent=2, ensure_ascii=False)
 
     logger.info(f"Written {len(records):,} records to {output_path}")
     return output_path
