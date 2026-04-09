@@ -24,9 +24,9 @@ WITH source AS (
 
 cleaned AS (
     SELECT
-        UPPER(TRIM(idfm_stop_id)) AS idfm_stop_id,
-        TRIM(stif_stop_code)      AS stif_stop_code,
-        CAST(ingestion_ts AS TIMESTAMP) AS ingestion_ts
+        UPPER(TRIM(idfm_stop_id))        AS idfm_stop_id,
+        CAST(stif_stop_code AS STRING)   AS stif_stop_code,
+        CAST(ingestion_ts AS TIMESTAMP)  AS ingestion_ts
     FROM source
     WHERE idfm_stop_id IS NOT NULL
       AND stif_stop_code IS NOT NULL
