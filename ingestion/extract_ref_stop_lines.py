@@ -150,8 +150,7 @@ def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
 
                 if count % 1_000_000 == 0:
                     logger.info(
-                        f"  {count:,} rows processed, "
-                        f"{len(pairs):,} pairs so far"
+                        f"  {count:,} rows processed, " f"{len(pairs):,} pairs so far"
                     )
 
     logger.info(
