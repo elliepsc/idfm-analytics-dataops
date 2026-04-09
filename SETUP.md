@@ -232,7 +232,7 @@ In the Airflow UI → **Admin → Variables**, add the following variables:
 |-----|-------|-------------|
 | `BQ_DATASET_BASE` | `transport` | Base name for BigQuery schemas. dbt generates `transport_core`, `transport_analytics`, `transport_staging` from this. |
 | `gcp_credentials_path` | `/opt/airflow/credentials/gcp-key.json` | Path to GCP credentials inside the Airflow container. |
-| `IDFM_API_KEY` | `*********` | API Key created when requested https://data.iledefrance-mobilites.fr/account/ (you need an account) . |
+| `IDFM_API_KEY` |  `<your_key>` | API Key created when requested https://data.iledefrance-mobilites.fr/account/ (you need an account) . |
 
 > **Why not `.env` for these?** Airflow variables (Admin → Variables) are stored in the Airflow metadata DB and available to all DAGs via `Variable.get()` or `os.getenv()`. They persist across container restarts — unlike `.env` which is loaded at container startup only.
 
