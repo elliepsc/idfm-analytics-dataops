@@ -30,7 +30,6 @@ cleaned AS (
     FROM source
     WHERE idfm_stop_id IS NOT NULL
       AND stif_stop_code IS NOT NULL
-      AND stif_stop_code != ''
 )
 
 SELECT * FROM cleaned
