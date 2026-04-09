@@ -72,10 +72,10 @@ sources:
         description: "Stop to line mapping"
 
       - name: raw_ref_stop_id_mapping
-          description: "TN_PA mapping: STIF numeric stop code ↔ IDFM GTFS stop_id. 528 mappings, ~98.3% validation coverage."
-          columns:
-            - name: idfm_stop_id
-            - name: stif_stop_code
+        description: "TN_PA mapping: STIF numeric stop code ↔ IDFM GTFS stop_id. 528 mappings, ~98.3% validation coverage."
+        columns:
+          - name: idfm_stop_id
+          - name: stif_stop_code
       - name: raw_ref_stations
         description: "Station reference data from IDFM — emplacement-des-gares-idf dataset"
         columns:
