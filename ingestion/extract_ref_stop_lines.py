@@ -5,20 +5,29 @@ Why GTFS and not the ODS API?
   The arrets-lignes dataset on the IDFM ODS API does not contain a usable
   line_id field and is capped at 10,000 records out of 73,264 available.
   The GTFS feed (offre-horaires-tc-gtfs-idfm) is the authoritative source
-  for stop → route mapping and covers the full network.
+  for stop to route mapping and covers the full IDF network.
 
 GTFS files used:
-  stops.txt    → stop_id
-  trips.txt    → route_id (= line_id in IDFM nomenclature)
-  stop_times.txt → links stop_id to trip_id → route_id
+  trips.txt      -> route_id (= line_id in IDFM nomenclature), 62 MB
+  stop_times.txt -> links stop_id to trip_id -> route_id, 1.1 GB uncompressed
+
+Memory strategy:
+  trips.txt is loaded fully into a dict (trip_id -> route_id).
+  stop_times.txt is streamed line by line from the compressed ZIP to avoid OOM.
+  Validated on WSL: 11.7M rows -> 73,725 unique (stop_id, line_id) pairs in ~2 min.
+
+How the file_id is resolved:
+  The GTFS ZIP file_id changes with each IDFM update (3x/day at 8h, 13h, 17h).
+  We query the dataset records endpoint first to get the current file_id,
+  then download the ZIP using that ID.
 
 Output:
   One JSON record per unique (stop_id, line_id) pair.
-  Loaded into BigQuery as transport_raw.raw_ref_stop_lines.
+  Loaded into BigQuery as transport_raw.raw_ref_stop_lines (WRITE_TRUNCATE).
 
 Usage:
-    python ingestion/extract_ref_stop_lines.py
-    python ingestion/extract_ref_stop_lines.py --output /tmp/data
+    IDFM_API_KEY=your_key python ingestion/extract_ref_stop_lines.py
+    IDFM_API_KEY=your_key python ingestion/extract_ref_stop_lines.py --output /tmp/data
 """
 
 import argparse
@@ -37,128 +46,124 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# GTFS feed URL — IDFM open data, updated daily
-# Source: https://data.iledefrance-mobilites.fr/explore/dataset/offre-horaires-tc-gtfs-idfm
-GTFS_URL = (
-    "https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets"
-    "/offre-horaires-tc-gtfs-idfm/exports/files"
-)
-
-# Fallback direct download URL (stable CDN link)
-GTFS_DIRECT_URL = (
-    "https://eu.ftp.opendatasoft.com/sncf/gtfs/export-intercites-gtfs-last.zip"
-)
-
-# IDFM GTFS actual URL (confirmed working)
-GTFS_IDFM_URL = (
-    "https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets"
-    "/offre-horaires-tc-gtfs-idfm/exports/files?apikey={api_key}"
-)
+IDFM_BASE_URL = "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
+GTFS_DATASET_ID = "offre-horaires-tc-gtfs-idfm"
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).parent.parent))
 
 
-def download_gtfs(api_key: str = None) -> bytes:
-    """Download GTFS zip from IDFM open data portal."""
-    url = GTFS_URL
-    headers = {}
+def get_gtfs_file_id(api_key: str) -> tuple:
+    """
+    Query the dataset records to get the current GTFS ZIP file_id.
+    The file_id changes with each IDFM update (3x/day).
 
-    if api_key:
-        headers["Authorization"] = f"Apikey {api_key}"
+    Returns (file_id, filename).
+    """
+    url = f"{IDFM_BASE_URL}/catalog/datasets/{GTFS_DATASET_ID}/records"
+    params = {"limit": 1, "apikey": api_key}
 
-    logger.info(f"Downloading GTFS feed from {url}")
-    response = requests.get(url, headers=headers, timeout=120, stream=True)
-
-    if response.status_code == 401:
-        raise ValueError(
-            "GTFS download requires an IDFM API key. "
-            "Set IDFM_API_KEY in your .env file. "
-            "Register at: https://data.iledefrance-mobilites.fr"
-        )
-
+    logger.info("Resolving current GTFS file_id from dataset records...")
+    response = requests.get(url, params=params, timeout=30)
     response.raise_for_status()
 
-    content = response.content
-    logger.info(f"Downloaded {len(content) / 1024 / 1024:.1f} MB")
+    data = response.json()
+    results = data.get("results", [])
+
+    if not results:
+        raise ValueError("No records found in GTFS dataset")
+
+    file_id = results[0]["url"]["id"]
+    filename = results[0]["url"]["filename"]
+    logger.info(f"Current GTFS file: {filename} (id={file_id})")
+    return file_id, filename
+
+
+def download_gtfs(api_key: str, file_id: str) -> bytes:
+    """Download GTFS ZIP using the resolved file_id."""
+    url = f"{IDFM_BASE_URL}/catalog/datasets/{GTFS_DATASET_ID}/files/{file_id}"
+    params = {"apikey": api_key}
+
+    logger.info(f"Downloading GTFS ZIP (file_id={file_id})...")
+    response = requests.get(url, params=params, timeout=300, stream=True)
+    response.raise_for_status()
+
+    chunks = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=1024 * 1024):
+        chunks.append(chunk)
+        total += len(chunk)
+        if total % (20 * 1024 * 1024) == 0:
+            logger.info(f"  Downloaded {total / 1024 / 1024:.0f} MB...")
+
+    content = b"".join(chunks)
+    logger.info(f"Download complete: {len(content) / 1024 / 1024:.1f} MB")
     return content
 
 
-def parse_csv_from_zip(zip_bytes: bytes, filename: str) -> list[dict]:
-    """Extract and parse a CSV file from a GTFS zip archive."""
+def load_trips(zip_bytes: bytes) -> dict:
+    """
+    Load trips.txt fully into a trip_id -> route_id dict.
+    trips.txt is 62 MB uncompressed — safe to load entirely.
+    """
     import csv
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        # GTFS files can be at root or in a subdirectory
-        available = zf.namelist()
-        target = next(
-            (f for f in available if f.endswith(filename)),
-            None,
-        )
+        with zf.open("trips.txt") as f:
+            reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+            trip_to_route = {
+                row["trip_id"]: row["route_id"]
+                for row in reader
+                if row.get("trip_id") and row.get("route_id")
+            }
 
-        if target is None:
-            raise FileNotFoundError(
-                f"{filename} not found in GTFS zip. " f"Available files: {available}"
-            )
-
-        logger.info(f"Parsing {target} from GTFS zip")
-
-        with zf.open(target) as f:
-            content = f.read().decode("utf-8-sig")  # handle BOM if present
-            reader = csv.DictReader(io.StringIO(content))
-            return list(reader)
+    logger.info(f"Indexed {len(trip_to_route):,} trips -> routes")
+    return trip_to_route
 
 
-def build_stop_line_mapping(
-    trips: list[dict],
-    stop_times: list[dict],
-) -> list[dict]:
+def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
     """
-    Build stop → line mapping from GTFS trips and stop_times.
+    Stream stop_times.txt line by line from the compressed ZIP.
 
-    GTFS join logic:
-      stop_times.trip_id → trips.trip_id → trips.route_id (= line_id)
+    stop_times.txt is 1.1 GB uncompressed — must be streamed to avoid OOM.
+    Reads directly from the ZipFile object without full decompression.
 
-    Returns deduplicated list of (stop_id, line_id) pairs.
+    Returns set of (stop_id, line_id) tuples.
     """
-    # Build trip_id → route_id index
-    trip_to_route = {
-        row["trip_id"]: row["route_id"]
-        for row in trips
-        if row.get("trip_id") and row.get("route_id")
-    }
+    import csv
 
-    logger.info(f"Indexed {len(trip_to_route):,} trips → routes")
+    pairs = set()
+    count = 0
 
-    # Build unique stop_id → set of line_ids
-    stop_line_pairs: set[tuple] = set()
-    skipped = 0
+    logger.info("Streaming stop_times.txt (1.1 GB uncompressed)...")
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        with zf.open("stop_times.txt") as f:
+            reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+            for row in reader:
+                count += 1
+                trip_id = row.get("trip_id", "").strip()
+                stop_id = row.get("stop_id", "").strip()
 
-    for row in stop_times:
-        trip_id = row.get("trip_id", "").strip()
-        stop_id = row.get("stop_id", "").strip()
+                if trip_id and stop_id:
+                    route_id = trip_to_route.get(trip_id)
+                    if route_id:
+                        pairs.add((stop_id.upper(), route_id.upper()))
 
-        if not trip_id or not stop_id:
-            skipped += 1
-            continue
-
-        route_id = trip_to_route.get(trip_id)
-        if route_id:
-            stop_line_pairs.add((stop_id.upper(), route_id.upper()))
+                if count % 1_000_000 == 0:
+                    logger.info(
+                        f"  {count:,} rows processed, "
+                        f"{len(pairs):,} pairs so far"
+                    )
 
     logger.info(
-        f"Built {len(stop_line_pairs):,} unique (stop_id, line_id) pairs "
-        f"(skipped {skipped:,} rows with missing ids)"
+        f"Streaming complete: {count:,} rows -> "
+        f"{len(pairs):,} unique (stop_id, line_id) pairs"
     )
-
-    return [
-        {"stop_id": stop_id, "line_id": line_id}
-        for stop_id, line_id in sorted(stop_line_pairs)
-    ]
+    return pairs
 
 
 def extract_ref_stop_lines(output_dir: Path = None) -> Path:
     """
-    Main entry point: download GTFS, parse, build mapping, write JSON.
+    Main entry point: resolve file_id, download GTFS, parse, write JSON.
 
     Returns path to the output JSON file.
     """
@@ -177,47 +182,44 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
 
     api_key = os.getenv("IDFM_API_KEY")
     if not api_key:
-        logger.warning(
-            "IDFM_API_KEY not set — attempting unauthenticated download. "
-            "This may fail. Set IDFM_API_KEY in .env for reliable access."
+        raise ValueError(
+            "IDFM_API_KEY environment variable not set. "
+            "Register at https://data.iledefrance-mobilites.fr to get a key. "
+            "Add IDFM_API_KEY to .env and Airflow UI Variables."
         )
 
-    # Download GTFS
-    gtfs_bytes = download_gtfs(api_key=api_key)
+    # Step 1: Resolve current file_id (changes 3x/day)
+    file_id, filename = get_gtfs_file_id(api_key)
 
-    # Parse required files
-    logger.info("Parsing trips.txt")
-    trips = parse_csv_from_zip(gtfs_bytes, "trips.txt")
-    logger.info(f"  → {len(trips):,} trips")
+    # Step 2: Download ZIP (~140 MB compressed)
+    gtfs_bytes = download_gtfs(api_key, file_id)
 
-    logger.info("Parsing stop_times.txt")
-    stop_times = parse_csv_from_zip(gtfs_bytes, "stop_times.txt")
-    logger.info(f"  → {len(stop_times):,} stop_times rows")
+    # Step 3: Load trips.txt (62 MB — safe to load fully)
+    trip_to_route = load_trips(gtfs_bytes)
 
-    # Build mapping
-    pairs = build_stop_line_mapping(trips, stop_times)
+    # Step 4: Stream stop_times.txt (1.1 GB — must stream)
+    pairs = stream_stop_line_pairs(gtfs_bytes, trip_to_route)
 
-    # Serialise to JSON (same format as other extractors)
+    # Step 5: Write newline-delimited JSON
     ingestion_ts = datetime.now(timezone.utc).isoformat()
     records = [
         {
-            "stop_id": p["stop_id"],
-            "line_id": p["line_id"],
+            "stop_id": stop_id,
+            "line_id": line_id,
             "ingestion_ts": ingestion_ts,
             "source": "gtfs_idfm",
         }
-        for p in pairs
+        for stop_id, line_id in sorted(pairs)
     ]
 
-    output_path = (
-        output_dir
-        / f"ref_stop_lines_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.json"
-    )
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    output_path = output_dir / f"ref_stop_lines_{timestamp}.json"
+
     with open(output_path, "w", encoding="utf-8") as f:
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    logger.info(f"✅ Written {len(records):,} records to {output_path}")
+    logger.info(f"Written {len(records):,} records to {output_path}")
     return output_path
 
 
