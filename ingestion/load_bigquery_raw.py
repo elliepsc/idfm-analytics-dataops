@@ -233,6 +233,7 @@ class BigQueryLoader:
             "ref_lines": "raw_ref_lines",
             "ref_stop_lines": "raw_ref_stop_lines",
             "ref_stations": "raw_ref_stations",  # emplacement-des-gares-idf — id_ref_zdc ↔ ida
+            "ref_stop_id_mapping": "raw_ref_stop_id_mapping",  # TN_PA: STIF code ↔ IDFM stop_id
         }
 
         for pattern, table_name in ref_tables.items():

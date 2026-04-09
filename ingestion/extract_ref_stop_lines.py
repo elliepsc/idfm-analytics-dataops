@@ -150,7 +150,8 @@ def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
 
                 if count % 1_000_000 == 0:
                     logger.info(
-                        f"  {count:,} rows processed, " f"{len(pairs):,} pairs so far"
+                        f"  {count:,} rows processed, "
+                        f"{len(pairs):,} pairs so far"
                     )
 
     logger.info(
@@ -220,6 +221,11 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
         json.dump(records, f, indent=2, ensure_ascii=False)
 
     logger.info(f"Written {len(records):,} records to {output_path}")
+
+    # Step 6: Extract TN_PA stop ID mapping (STIF code -> IDFM stop_id)
+    # Bridges fct_validations_daily (STIF stop_ids) with stg_ref_stop_lines (IDFM stop_ids)
+    extract_stop_id_mapping(gtfs_bytes, output_dir)
+
     return output_path
 
 
@@ -235,3 +241,58 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     extract_ref_stop_lines(output_dir=args.output)
+
+
+def extract_stop_id_mapping(zip_bytes: bytes, output_dir: Path) -> Path:
+    """
+    Extract TN_PA stop ID mapping from object_codes_extension.txt.
+
+    TN_PA codes are the STIF numeric stop IDs used in IDFM validation data.
+    This mapping bridges validations (STIF stop_id) → GTFS (IDFM stop_id).
+
+    object_codes_extension.txt structure:
+      object_type | object_id    | object_system | object_code
+      stop_area   | IDFM:493509  | TN_PA         | 161
+
+    Where:
+      object_id   = IDFM GTFS stop_id (matches stg_ref_stop_lines.stop_id)
+      object_code = STIF numeric code (matches fct_validations_daily.stop_id)
+    """
+    import csv
+
+    logger.info("Extracting TN_PA stop ID mapping from object_codes_extension.txt...")
+    mappings = []
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        with zf.open("object_codes_extension.txt") as f:
+            reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+            for row in reader:
+                if row.get("object_system") == "TN_PA":
+                    mappings.append(
+                        {
+                            "idfm_stop_id": row["object_id"],
+                            "stif_stop_code": row["object_code"],
+                        }
+                    )
+
+    logger.info(f"Found {len(mappings):,} TN_PA mappings (STIF → IDFM stop_id)")
+
+    ingestion_ts = datetime.now(timezone.utc).isoformat()
+    records = [
+        {
+            "idfm_stop_id": m["idfm_stop_id"],
+            "stif_stop_code": m["stif_stop_code"],
+            "ingestion_ts": ingestion_ts,
+            "source": "gtfs_object_codes_tnpa",
+        }
+        for m in mappings
+    ]
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    output_path = output_dir / f"ref_stop_id_mapping_{timestamp}.json"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, indent=2, ensure_ascii=False)
+
+    logger.info(f"Written {len(records):,} records to {output_path}")
+    return output_path

@@ -28,13 +28,20 @@
 
 WITH validations_by_line AS (
   -- Aggregate validations to line level via stop → line mapping
+  -- Join path: fct_validations_daily.stop_id (STIF code)
+  --          → stg_ref_stop_id_mapping.stif_stop_code → idfm_stop_id
+  --          → stg_ref_stop_lines.stop_id (IDFM) → line_id
+  -- Coverage: ~98.3% of validation rows (TN_PA mapping, 528 STIF codes)
   SELECT
     DATE_TRUNC(f.validation_date, MONTH) AS validation_month,
     sl.line_id,
     SUM(f.validation_count)              AS line_validations
   FROM {{ ref('fct_validations_daily') }} f
+  INNER JOIN {{ ref('stg_ref_stop_id_mapping') }} m
+    ON f.stop_id = m.stif_stop_code
   INNER JOIN {{ ref('stg_ref_stop_lines') }} sl
-    ON f.stop_id = sl.stop_id
+    ON m.idfm_stop_id = sl.stop_id
+  WHERE f.stop_id != '<NA>'
   GROUP BY 1, 2
 ),
 

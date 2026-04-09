@@ -103,6 +103,7 @@ warehouse/dbt/dbt_internal_packages_data/
 terraform/README_TERRAFORM.md
 warehouse/dbt/README_DBT.md
 warehouse/dbt/models/staging/MIGRATION_NOTE.md
+ENVIRONMENTS.md
 
 
 
