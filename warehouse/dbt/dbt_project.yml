@@ -33,6 +33,10 @@ models:
       +materialized: view
       +schema: staging
 
+    intermediate:
+      +materialized: view
+      +schema: staging
+
     core:
       +materialized: table
       +schema: core

@@ -31,11 +31,17 @@ idfm:
     ref_stops:
       id: "arrets-lignes"
       fields:
+        line_external_id: "id"
+        line_name: "route_long_name"
+        line_short_name: "shortname"
         stop_id: "stop_id"
         stop_name: "stop_name"
         latitude: "stop_lat"
         longitude: "stop_lon"
+        transport_mode: "mode"
+        operator: "operatorname"
         town: "nom_commune"
+        insee_code: "code_insee"
     # -------------------------------------------------------------------------
     # LINE REFERENTIAL
     # -------------------------------------------------------------------------

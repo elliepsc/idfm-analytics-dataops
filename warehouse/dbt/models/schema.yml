@@ -101,6 +101,48 @@ models:
               max_value: 100
               inclusive: true
 
+  - name: int_validation_stop_line
+    description: |
+      **Validation stop-to-line bridge**
+
+      **Grain**: 1 validation row x candidate line
+
+      **Purpose**:
+      Reconciles validation STIF stop codes with IDFM stop ids and then with
+      IDFM line ids using the GTFS-derived stop-line mapping.
+
+      **Important**:
+      `mapping_confidence='high'` means one mapped line only and is the
+      recommended trusted subset for downstream line-level facts.
+    columns:
+      - name: validation_bridge_key
+        description: "Surrogate key on validation_date + stif_stop_id + ticket_type + line_id"
+        data_tests:
+          - not_null
+          - unique:
+              config:
+                severity: warn
+      - name: validation_date
+        description: "Validation date"
+        data_tests:
+          - not_null
+      - name: stif_stop_id
+        description: "Original STIF stop code from validations"
+        data_tests:
+          - not_null
+      - name: line_id
+        description: "Mapped IDFM line id when available"
+      - name: mapping_confidence
+        description: "Confidence level for the stop-to-line reconciliation"
+        data_tests:
+          - accepted_values:
+              values: ['high', 'medium', 'low', 'unmapped']
+      - name: is_trusted_mapping
+        description: "TRUE when the stop maps to one line only"
+        data_tests:
+          - not_null
+
+
   # ─────────────────────────────────────────────────────────────
   # CORE - DIMENSIONS
   # ─────────────────────────────────────────────────────────────
@@ -312,6 +354,65 @@ models:
         description: "Ingestion timestamp (used for freshness monitoring)"
         data_tests:
           - not_null
+
+  - name: fct_validations_line_daily
+    description: |
+      **Daily validations fact table at line level**
+
+      **Grain**: 1 line x 1 day x 1 ticket type
+
+      **Source**:
+      High-confidence rows only from `int_validation_stop_line`.
+
+      **Scope**:
+      This model is designed to support trusted METRO and RER demand analysis
+      without allocating ambiguous hub validations across multiple lines.
+    columns:
+      - name: line_validation_key
+        description: "Unique surrogate key"
+        data_tests:
+          - not_null
+          - unique
+      - name: validation_date
+        description: "Validation date"
+        data_tests:
+          - not_null
+      - name: line_id
+        description: "FK to dim_line"
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_line')
+              field: line_id
+              config:
+                severity: warn
+      - name: transport_mode
+        description: "Line transport mode"
+        data_tests:
+          - not_null
+      - name: ticket_type
+        description: "Ticket type"
+        data_tests:
+          - not_null
+      - name: trusted_validation_count
+        description: "Daily validations from trusted mappings only"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: total_validation_count
+        description: "Total validations used by the model"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: mapping_quality
+        description: "Mapping strategy used by the fact"
+        data_tests:
+          - accepted_values:
+              values: ['trusted_only']
 
   - name: fct_punctuality_monthly
     description: |-
