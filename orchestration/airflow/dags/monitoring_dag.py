@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
 from utils.config import (
     BQ_DATASET_CORE,
     BQ_DATASET_RAW,

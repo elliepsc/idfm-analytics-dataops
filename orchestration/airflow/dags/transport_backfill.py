@@ -14,7 +14,6 @@ import pendulum
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-
 from utils.config import (
     BQ_DATASET_RAW,
     GCP_PROJECT_ID,
