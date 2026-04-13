@@ -1,5 +1,6 @@
 .PHONY: help setup install test lint clean ingest load-raw dbt-build check-sla
 .PHONY: airflow-start airflow-stop airflow-logs airflow-ui airflow-trigger-daily airflow-backfill reviewer
+.PHONY: ci-install python-quality-local data-quality-local data-quality-prod-local dbt-parse-local terraform-validate-local ci-local
 
 # Variables
 PYTHON := python3
@@ -20,6 +21,7 @@ AIRFLOW_PASSWORD := $(if $(AIRFLOW_PASSWORD),$(AIRFLOW_PASSWORD),airflow)
 AIRFLOW_DBT_BIN ?= $(strip $(shell sh -c "grep -E '^DBT_BIN=' $(ROOT_ENV_FILE) 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r'"))
 AIRFLOW_DBT_BIN := $(if $(AIRFLOW_DBT_BIN),$(AIRFLOW_DBT_BIN),/home/airflow/.local/bin/dbt)
 AIRFLOW_UI_URL := http://localhost:$(AIRFLOW_HOST_PORT)
+CI_DBT_PROFILES_DIR ?= /tmp/idfm_ci_profiles
 
 airflow-start:  ## Start Airflow locally
 	$(AIRFLOW_COMPOSE) up -d
@@ -65,6 +67,10 @@ install:  ## Install Python dependencies
 	$(PIP) install -r requirements.txt
 	cd warehouse/dbt && $(DBT) deps
 
+ci-install:  ## Install local tooling used by CI/data-quality workflows
+	$(PIP) install -r requirements.txt
+	$(PIP) install black flake8 isort pytest pytest-cov dbt-core==1.8.7 dbt-bigquery==1.8.2
+
 setup-gcp:  ## Configure GCP: BigQuery datasets + GCS raw landing zone bucket
 	$(PYTHON) scripts/setup_bigquery.py
 
@@ -75,6 +81,12 @@ lint:  ## Check code style (Python + SQL)
 	black --check ingestion/ scripts/
 	isort --check-only ingestion/ scripts/
 	flake8 ingestion/ scripts/ --max-line-length=120
+
+python-quality-local:  ## Reproduce the GitHub CI python-quality job locally
+	black --check ingestion/ scripts/ orchestration/airflow/dags/ tests/
+	isort --check-only ingestion/ scripts/ orchestration/airflow/dags/ tests/
+	flake8 ingestion/ scripts/ orchestration/airflow/dags/ tests/ --max-line-length=120 --extend-ignore=E203
+	pytest tests/unit/ -v --cov=ingestion --cov=scripts --cov-report=xml
 
 lint-sql:  ## Lint dbt SQL (sqlfluff - best effort)
 	sqlfluff lint warehouse/dbt/models --dialect bigquery
@@ -130,6 +142,12 @@ dbt-compile:  ## Compile models (no execution)
 dbt-parse:  ## Parse models (CI)
 	cd warehouse/dbt && $(DBT) parse --profiles-dir . --profile transport_ci --target ci
 
+dbt-parse-local:  ## Reproduce the GitHub CI dbt-parse job locally
+	mkdir -p $(CI_DBT_PROFILES_DIR)
+	cp warehouse/dbt/profile_ci.yml $(CI_DBT_PROFILES_DIR)/profiles.yml
+	cd warehouse/dbt && $(DBT) deps --profiles-dir $(CI_DBT_PROFILES_DIR) --profile transport_ci --target ci
+	cd warehouse/dbt && GCP_PROJECT_ID=dummy-project $(DBT) parse --profiles-dir $(CI_DBT_PROFILES_DIR) --profile transport_ci --target ci
+
 dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_punctuality_monthly for retroactive SNCF corrections)
 	# Use case for fct_punctuality_monthly:
 	# SNCF occasionally publishes retroactive corrections for past months.
@@ -168,6 +186,22 @@ check-sla:  ## Check SLA compliance (data health)
 ge-validate:  ## Run Great Expectations data quality checks locally (generates fixture data first)
 	$(PYTHON) scripts/create_test_data.py
 	$(PYTHON) scripts/validate_data_quality.py
+
+data-quality-local:  ## Reproduce the local part of the GitHub data-quality workflow
+	pytest tests/unit/ -v --cov=ingestion --cov-report=xml
+	$(PYTHON) -m py_compile scripts/check_sla.py
+	$(PYTHON) scripts/create_test_data.py
+	$(PYTHON) scripts/validate_data_quality.py
+
+data-quality-prod-local:  ## Run the prod BigQuery SLA check locally (requires ADC + .env)
+	@set -a; . ./.env; set +a; $(PYTHON) scripts/check_sla.py
+
+terraform-validate-local:  ## Reproduce the GitHub Terraform validation job locally
+	cd terraform && terraform fmt -check -recursive
+	cd terraform && terraform init -backend=false
+	cd terraform && terraform validate
+
+ci-local: python-quality-local terraform-validate-local dbt-parse-local  ## Run the main CI jobs locally
 
 # Full workflows
 elementary-report:  ## Generate Elementary data observability report
