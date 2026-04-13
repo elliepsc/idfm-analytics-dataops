@@ -55,10 +55,14 @@ jobs:
         # fct_punctuality_monthly, mart_network_scorecard_monthly from transport_core/analytics).
         # Without '+', dbt tries to build monitoring marts whose ref() targets don't exist
         # in the CI environment, causing 404 Dataset transport_core not found.
+        #
+        # EXCLUDE fct_validations_line_daily: this model depends on int_validation_stop_line
+        # (GTFS stop-line bridge, v4 architecture) whose table may not be materialized yet.
+        # Its relationship test errors with 404 if the table doesn't exist in BigQuery.
         run: |
           cd warehouse/dbt
           GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-          dbt build --target prod --select +marts.monitoring
+          dbt build --target prod --select +marts.monitoring --exclude fct_validations_line_daily
 
   data-quality-tests:
     runs-on: ubuntu-latest
