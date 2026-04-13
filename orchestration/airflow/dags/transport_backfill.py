@@ -26,7 +26,6 @@ from utils.config import (
 )
 from utils.dag_utils import register_failure_callbacks
 
-
 default_args = {
     "owner": "data-team",
     "depends_on_past": False,
