@@ -15,7 +15,17 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-# Add dags/utils to path for direct import
+# Add dags/ so that `from utils.config import ...` resolves inside monitoring.py
+sys.path.insert(
+    0,
+    str(
+        Path(__file__).parent.parent.parent
+        / "orchestration"
+        / "airflow"
+        / "dags"
+    ),
+)
+# Add dags/utils/ so that `import monitoring` resolves directly
 sys.path.insert(
     0,
     str(
