@@ -86,7 +86,7 @@ BQ_DATASET_ANALYTICS=transport_analytics
 Add to `~/.bashrc` so you can load env vars in any terminal:
 
 ```bash
-echo 'alias load-idfm-env="set -a && source /path/to/idfm-analytics-dataops/.env && set +a"' >> ~/.bashrc
+echo 'alias load-idfm-env="set -a && . /path/to/idfm-analytics-dataops/.env && set +a"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -202,10 +202,11 @@ dbt build --target prod
 
 ```bash
 make airflow-start
-# Or: cd orchestration/airflow && docker-compose up -d
+# Or: cd orchestration/airflow && docker compose --env-file ../../.env up -d
 ```
 
-Access UI: `http://localhost:8080` — login: `airflow` / `airflow`
+Access UI: `http://localhost:8081` by default. The port is controlled once via `AIRFLOW_HOST_PORT` in the root `.env`.
+Default login is `airflow` / `airflow`, controlled by `_AIRFLOW_WWW_USER_USERNAME` and `_AIRFLOW_WWW_USER_PASSWORD` in the same root `.env`.
 
 ### Step 2 — Verify DAGs
 
@@ -213,28 +214,21 @@ Four DAGs should appear in the UI:
 - `transport_daily_pipeline` — daily ingestion + load
 - `dbt_daily` — dbt build + docs
 - `transport_backfill` — historical backfill
-- `monitoring_dag` — SLA checks + Slack alerts
+- `transport_monitoring` — SLA checks + Slack alerts
 
 ### Step 3 — Environment in Airflow
 
-Airflow reads from `orchestration/airflow/.env`. Copy the template:
-
-```bash
-cp orchestration/airflow/.env.example orchestration/airflow/.env
-# Fill in GCP_PROJECT_ID and BQ_DATASET_BASE
-```
+Airflow reads the root `.env` through Docker Compose (`env_file: ../../.env` in `orchestration/airflow/docker-compose.yml`).
+There is no separate Airflow `.env` to maintain.
 
 ### Step 4 — Airflow UI Variables
 
-In the Airflow UI → **Admin → Variables**, add the following variables:
+No Airflow UI variables are required for the happy path.
+`GCP_PROJECT_ID`, `BQ_DATASET_BASE`, `IDFM_API_KEY`, `AIRFLOW_HOST_PORT`, and the default login are all read from the root `.env`.
 
-| Key | Value | Description |
-|-----|-------|-------------|
-| `BQ_DATASET_BASE` | `transport` | Base name for BigQuery schemas. dbt generates `transport_core`, `transport_analytics`, `transport_staging` from this. |
-| `gcp_credentials_path` | `/opt/airflow/credentials/gcp-key.json` | Path to GCP credentials inside the Airflow container. |
-| `IDFM_API_KEY` |  `<your_key>` | API Key created when requested https://data.iledefrance-mobilites.fr/account/ (you need an account) . |
+Optional only:
 
-> **Why not `.env` for these?** Airflow variables (Admin → Variables) are stored in the Airflow metadata DB and available to all DAGs via `Variable.get()` or `os.getenv()`. They persist across container restarts — unlike `.env` which is loaded at container startup only.
+- Add the `slack_webhook` connection in Airflow if you want Slack alerts locally.
 
 ---
 
@@ -430,16 +424,16 @@ dbt build --target dev  # uses warehouse/dbt/profiles.yml automatically
 # Load before any script
 load-idfm-env
 # Or manually:
-set -a && source .env && set +a
+set -a && . ./.env && set +a
 ```
 
 ### Airflow won't start
 
 ```bash
 cd orchestration/airflow
-docker-compose down -v
-docker-compose build --no-cache
-docker-compose up -d
+docker compose --env-file ../../.env down -v
+docker compose --env-file ../../.env build --no-cache
+docker compose --env-file ../../.env up -d
 ```
 
 ### Elementary profile not found
@@ -466,7 +460,7 @@ edr report --project-dir . --profiles-dir . --profile-target default ...
 - [ ] BigQuery datasets provisioned via Terraform
 - [ ] `dbt deps` run in `warehouse/dbt/`
 - [ ] `dbt build --target dev` passes
-- [ ] Airflow running at `http://localhost:8080`
+- [ ] Airflow running at `http://localhost:8081` (or the `AIRFLOW_HOST_PORT` you set in `.env`)
 - [ ] Elementary tables initialized (`dbt run --select elementary --target prod`)
 - [ ] GitHub secrets configured (WIF) — for CI/CD only
 

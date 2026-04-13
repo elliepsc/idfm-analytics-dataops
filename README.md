@@ -26,6 +26,7 @@
 - [Data Quality & Testing](#-data-quality--testing)
 - [CI/CD](#-cicd)
 - [Dashboard](#-dashboard)
+- [Quickstart](#-quickstart)
 - [Steps to Reproduce](#-steps-to-reproduce)
 - [Dev vs Prod Environments](#-dev-vs-prod-environments)
 - [Project Structure](#-project-structure)
@@ -170,7 +171,9 @@ extract_referentials  ─┘
 | `extract_punctuality` | PythonOperator | Fetch Transilien punctuality data → JSON |
 | `extract_referentials` | PythonOperator | Fetch stops and lines reference data → JSON |
 | `load_bigquery_raw` | PythonOperator | Load JSON → BigQuery RAW (WRITE_TRUNCATE) |
-| `dbt_build` | BashOperator | `dbt deps && dbt build` — run all models + tests |
+| `dbt_deps` | BashOperator | Install dbt packages before the build step |
+| `dbt_build` | BashOperator | Run dbt models + tests after dependencies are installed |
+| `verify_row_counts` | PythonOperator | Blocking guard that fails early if critical tables are empty |
 | `check_sla` | PythonOperator | Freshness + quality via `fct_data_health_daily` |
 | `notify_success` | PythonOperator | Slack alert on success (silent if unconfigured) |
 
@@ -405,6 +408,17 @@ Interactive dashboard: [Open in Looker Studio](https://lookerstudio.google.com/r
 
 ---
 
+## Quickstart
+
+Start with [QUICKSTART.md](QUICKSTART.md) if you want the shortest supported path.
+
+It gives you:
+
+- a reviewer path in a handful of commands
+- the exact `terraform init / import / apply` decision rule
+- the single source of truth for Airflow UI port and credentials
+- the common failures that blocked reproduction attempts
+
 ## 🔁 Steps to Reproduce
 
 ### Prerequisites
@@ -412,6 +426,7 @@ Interactive dashboard: [Open in Looker Studio](https://lookerstudio.google.com/r
 - Google Cloud account with BigQuery enabled
 - gcloud CLI installed and authenticated
 - IDFM API token ([register here](https://data.iledefrance-mobilites.fr))
+- Linux/macOS shell or WSL2 on Windows for the documented `make` and Bash commands
 
 ### 1. Clone
 
@@ -425,6 +440,7 @@ cd idfm-analytics-dataops
 ```bash
 cp .env.example .env
 # Fill in GCP_PROJECT_ID and IDFM_API_KEY
+# ADC only: do not add GOOGLE_APPLICATION_CREDENTIALS
 ```
 
 ### 3. Authenticate GCP
@@ -469,7 +485,7 @@ The project uses a `.env` file for all configuration. An alias is available to l
 
 ```bash
 # Add to ~/.bashrc for persistent use across sessions:
-alias load-idfm-env='set -a && source /path/to/idfm-analytics-dataops/.env && set +a'
+alias load-idfm-env='set -a && . /path/to/idfm-analytics-dataops/.env && set +a'
 
 # Then load:
 load-idfm-env
@@ -480,12 +496,12 @@ load-idfm-env
 ### 6. Start Airflow
 
 ```bash
-cd orchestration/airflow
-docker compose up -d
-# UI: http://localhost:8081  (admin / admin)
+make airflow-start
+# UI port comes from AIRFLOW_HOST_PORT in .env (default: http://localhost:8081)
 ```
 
-> ⚙️ After starting Airflow, configure the required UI variables (Admin → Variables). See [SETUP.md — Airflow UI Variables](SETUP.md#step-4--airflow-ui-variables) for the full list.
+No Airflow UI variables are required for the happy path. The containers read the root `.env` directly.
+Default login is `airflow / airflow` unless you override `_AIRFLOW_WWW_USER_USERNAME` and `_AIRFLOW_WWW_USER_PASSWORD` in `.env`.
 
 ### 7. Run historical backfill
 
@@ -512,7 +528,7 @@ dbt build --target prod
 
 ### 9. Trigger the pipeline
 
-Enable and trigger `transport_daily_pipeline` in the Airflow UI (http://localhost:8081).
+Enable and trigger `transport_daily_pipeline` in the Airflow UI at the URL configured by `AIRFLOW_HOST_PORT` in `.env` (default: `http://localhost:8081`).
 
 ---
 
