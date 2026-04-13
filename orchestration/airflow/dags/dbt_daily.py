@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+
 from utils.config import SLACK_WEBHOOK_CONN_ID, dbt_command, dbt_env
 from utils.dag_utils import register_failure_callbacks
 
