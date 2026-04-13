@@ -10,10 +10,10 @@ Trigger with parameters:
 
 from datetime import datetime, timedelta
 
+import pendulum
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-import pendulum
 
 from utils.config import (
     BQ_DATASET_RAW,
