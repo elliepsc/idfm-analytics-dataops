@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "ingestion"))
 
 import extract_ref_stops as mod
 
-
 SAMPLE_EXPORT_ROWS = [
     {
         "id": "IDFM:C01727",
@@ -107,7 +106,9 @@ def test_extract_ref_stops_writes_json_and_parquet(monkeypatch, tmp_path):
     }
 
     monkeypatch.setattr(mod, "load_config", lambda: config)
-    monkeypatch.setattr(mod, "download_stops_export", lambda **kwargs: SAMPLE_EXPORT_ROWS)
+    monkeypatch.setattr(
+        mod, "download_stops_export", lambda **kwargs: SAMPLE_EXPORT_ROWS
+    )
     monkeypatch.setenv("IDFM_API_KEY", "test-key")
 
     json_path = mod.extract_ref_stops(

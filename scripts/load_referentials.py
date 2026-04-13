@@ -12,6 +12,7 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+RAW_DATASET = os.getenv("BQ_DATASET_RAW", "transport_raw")
 
 
 def load_referentials():
@@ -28,7 +29,7 @@ def load_referentials():
         with open(stops_file) as f:
             data = json.load(f)
 
-        table_id = f"{project_id}.transport_raw.raw_ref_stops"
+        table_id = f"{project_id}.{RAW_DATASET}.raw_ref_stops"
 
         job_config = bigquery.LoadJobConfig(
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
@@ -51,7 +52,7 @@ def load_referentials():
         with open(lines_file) as f:
             data = json.load(f)
 
-        table_id = f"{project_id}.transport_raw.raw_ref_lines"
+        table_id = f"{project_id}.{RAW_DATASET}.raw_ref_lines"
 
         job_config = bigquery.LoadJobConfig(
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,

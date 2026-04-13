@@ -184,7 +184,7 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
         raise ValueError(
             "IDFM_API_KEY environment variable not set. "
             "Register at https://data.iledefrance-mobilites.fr to get a key. "
-            "Add IDFM_API_KEY to .env and Airflow UI Variables."
+            "Add IDFM_API_KEY to the root .env file used by local scripts and Airflow."
         )
 
     # Step 1: Resolve current file_id (changes 3x/day)

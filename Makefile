@@ -1,4 +1,5 @@
 .PHONY: help setup install test lint clean ingest load-raw dbt-build check-sla
+.PHONY: airflow-start airflow-stop airflow-logs airflow-ui airflow-trigger-daily airflow-backfill reviewer
 
 # Variables
 PYTHON := python3
@@ -6,49 +7,59 @@ PIP := pip3
 DBT := dbt
 START_DATE ?= 2024-01-01
 END_DATE ?= 2024-01-31
-
-
-.PHONY: airflow-start airflow-stop airflow-logs airflow-ui
+ROOT_ENV_FILE := .env
+AIRFLOW_COMPOSE_DIR := orchestration/airflow
+AIRFLOW_COMPOSE_ENV_FILE := ../../.env
+AIRFLOW_COMPOSE := cd $(AIRFLOW_COMPOSE_DIR) && docker compose --env-file $(AIRFLOW_COMPOSE_ENV_FILE)
+AIRFLOW_HOST_PORT ?= $(strip $(shell sh -c "grep -E '^AIRFLOW_HOST_PORT=' $(ROOT_ENV_FILE) 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r'"))
+AIRFLOW_HOST_PORT := $(if $(AIRFLOW_HOST_PORT),$(AIRFLOW_HOST_PORT),8081)
+AIRFLOW_USERNAME ?= $(strip $(shell sh -c "grep -E '^_AIRFLOW_WWW_USER_USERNAME=' $(ROOT_ENV_FILE) 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r'"))
+AIRFLOW_USERNAME := $(if $(AIRFLOW_USERNAME),$(AIRFLOW_USERNAME),airflow)
+AIRFLOW_PASSWORD ?= $(strip $(shell sh -c "grep -E '^_AIRFLOW_WWW_USER_PASSWORD=' $(ROOT_ENV_FILE) 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r'"))
+AIRFLOW_PASSWORD := $(if $(AIRFLOW_PASSWORD),$(AIRFLOW_PASSWORD),airflow)
+AIRFLOW_DBT_BIN ?= $(strip $(shell sh -c "grep -E '^DBT_BIN=' $(ROOT_ENV_FILE) 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d '\r'"))
+AIRFLOW_DBT_BIN := $(if $(AIRFLOW_DBT_BIN),$(AIRFLOW_DBT_BIN),/home/airflow/.local/bin/dbt)
+AIRFLOW_UI_URL := http://localhost:$(AIRFLOW_HOST_PORT)
 
 airflow-start:  ## Start Airflow locally
-	cd orchestration/airflow && docker-compose up -d
-	@echo "✅ Airflow started at http://localhost:8080"
-	@echo "   Username: airflow"
-	@echo "   Password: airflow"
+	$(AIRFLOW_COMPOSE) up -d
+	@echo "Airflow started at $(AIRFLOW_UI_URL)"
+	@echo "Username: $(AIRFLOW_USERNAME)"
+	@echo "Password: $(AIRFLOW_PASSWORD)"
+	@echo "Port is controlled by AIRFLOW_HOST_PORT in $(ROOT_ENV_FILE)"
 
 airflow-stop:  ## Stop Airflow
-	cd orchestration/airflow && docker-compose down
+	$(AIRFLOW_COMPOSE) down
 
 airflow-logs:  ## Show Airflow logs
-	cd orchestration/airflow && docker-compose logs -f
+	$(AIRFLOW_COMPOSE) logs -f
 
 airflow-ui:  ## Open Airflow UI
-	@echo "Opening http://localhost:8080"
-	@open http://localhost:8080 || xdg-open http://localhost:8080
+	@echo "Opening $(AIRFLOW_UI_URL)"
+	@open $(AIRFLOW_UI_URL) || xdg-open $(AIRFLOW_UI_URL)
 
 airflow-trigger-daily:  ## Manually trigger the daily DAG
-	docker exec -it airflow-scheduler airflow dags trigger transport_daily_pipeline
+	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler airflow dags trigger transport_daily_pipeline
 
 airflow-backfill:  ## Backfill (START_DATE and END_DATE required)
-	docker exec -it airflow-scheduler airflow dags trigger transport_backfill \
+	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler airflow dags trigger transport_backfill \
 		--conf '{"start_date":"$(START_DATE)", "end_date":"$(END_DATE)"}'
 
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# ─────────────────────────────────────────────────────────────
-# REVIEWER ENTRY POINTS (start here if you're new to the project)
-# ─────────────────────────────────────────────────────────────
+# Reviewer entry points
+run: install dbt-build check-sla  ## Requires GCP + ADC. Install deps, run dbt build, then SLA checks (no ingestion)
+	@echo "Pipeline complete. Check Looker Studio for dashboard."
+	@echo "For ingestion: make ingest START_DATE=2024-01-01 END_DATE=2024-01-31"
+	@echo "For docs:      make dbt-docs"
 
-run: install dbt-build check-sla  ## 🚀 Full pipeline for reviewers: install + dbt build + SLA check (no ingestion)
-	@echo "✅ Pipeline complete. Check Looker Studio for dashboard."
-	@echo "👉 For ingestion: make ingest START_DATE=2024-01-01 END_DATE=2024-01-31"
-	@echo "👉 For docs:      make dbt-docs"
+demo: install dbt-build elementary-report  ## Requires GCP + ADC. Build dbt artefacts and generate the Elementary report
+	@echo "Demo complete. Open docs/elementary_report.html for data health report."
 
-demo: install dbt-build elementary-report  ## 📊 Reviewer demo: build + generate Elementary observability report
-	@echo "✅ Demo complete. Open docs/elementary_report.html for data health report."
+reviewer: demo  ## Short reviewer path: same as demo, requires a real GCP project plus ADC
 
-setup: install setup-gcp  ## Full installation
+setup: install setup-gcp  ## Full installation for a configured GCP project
 
 install:  ## Install Python dependencies
 	$(PIP) install -r requirements.txt
@@ -82,10 +93,7 @@ clean:  ## Remove temporary files
 install-terraform:  ## Install Terraform
 	sudo snap install terraform --classic  # Requires sudo and snapd
 
-# ─────────────────────────────────────────────────────────────
-# INGESTION
-# ─────────────────────────────────────────────────────────────
-
+# Ingestion
 ingest: ingest-validations ingest-punctuality ingest-refs  ## Full ingestion
 
 ingest-validations:  ## Ingest validations (START_DATE to END_DATE)
@@ -102,10 +110,7 @@ ingest-refs:  ## Ingest referentials (stops, lines, mappings)
 load-raw:  ## Load data into BigQuery RAW
 	$(PYTHON) ingestion/load_bigquery_raw.py
 
-# ─────────────────────────────────────────────────────────────
-# DBT
-# ─────────────────────────────────────────────────────────────
-
+# dbt
 dbt-build:  ## dbt run + test
 	cd warehouse/dbt && $(DBT) build --target dev
 
@@ -126,40 +131,37 @@ dbt-parse:  ## Parse models (CI)
 	cd warehouse/dbt && $(DBT) parse --profiles-dir . --profile transport_ci --target ci
 
 dbt-refresh-prod:  ## Full-refresh a model in prod (use MODEL=fct_punctuality_monthly for retroactive SNCF corrections)
-	# ⚠️  Use case for fct_punctuality_monthly:
-	#     SNCF occasionally publishes retroactive corrections for past months.
-	#     insert_overwrite only recomputes the current partition on normal runs.
-	#     Past-month corrections are silently ignored by the nightly DAG.
+	# Use case for fct_punctuality_monthly:
+	# SNCF occasionally publishes retroactive corrections for past months.
+	# insert_overwrite only recomputes the current partition on normal runs.
+	# Past-month corrections are silently ignored by the nightly DAG.
 	#
-	#     PREREQUISITE — run ingestion FIRST to load the correction into raw_punctuality:
-	#       make ingest-punctuality START_DATE=YYYY-MM-01 END_DATE=YYYY-MM-31
-	#     Without this step, the refresh reads stale raw data and the correction
-	#     is NOT captured — the result is identical to before the refresh.
+	# PREREQUISITE - run ingestion FIRST to load the correction into raw_punctuality:
+	#   make ingest-punctuality START_DATE=YYYY-MM-01 END_DATE=YYYY-MM-31
+	# Without this step, the refresh reads stale raw data and the correction
+	# is not captured - the result is identical to before the refresh.
 	#
-	#     THEN recompute fct_punctuality_monthly from the updated raw:
-	#       make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	# THEN recompute fct_punctuality_monthly from the updated raw:
+	#   make dbt-refresh-prod MODEL=fct_punctuality_monthly
 	#
-	#     Full procedure:
-	#       1. Confirm correction published by SNCF (check raw_punctuality source)
-	#       2. make ingest-punctuality START_DATE=<month_start> END_DATE=<month_end>
-	#       3. make dbt-refresh-prod MODEL=fct_punctuality_monthly
-	#       4. Verify in Looker Studio that the corrected month reflects the update
+	# Full procedure:
+	#   1. Confirm correction published by SNCF (check raw_punctuality source)
+	#   2. make ingest-punctuality START_DATE=<month_start> END_DATE=<month_end>
+	#   3. make dbt-refresh-prod MODEL=fct_punctuality_monthly
+	#   4. Verify in Looker Studio that the corrected month reflects the update
 	#
-	#     NOTE: this is a partial mitigation — requires manual human action.
-	#     A proper fix would switch the incremental strategy to merge
-	#     (unique_key=punctuality_key) so corrections are picked up automatically.
-	#     Tracked as post-V3 backlog item.
-	docker exec -it airflow-airflow-scheduler-1 bash -c \
+	# NOTE: this is a partial mitigation - requires manual human action.
+	# A proper fix would switch the incremental strategy to merge
+	# (unique_key=punctuality_key) so corrections are picked up automatically.
+	# Tracked as post-V3 backlog item.
+	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler bash -lc \
 	  "cd /opt/airflow/warehouse/dbt && \
-	   /home/airflow/.local/bin/dbt run \
+	   $(AIRFLOW_DBT_BIN) run \
 	   --select $(MODEL) \
 	   --full-refresh \
 	   --target prod"
 
-# ─────────────────────────────────────────────────────────────
-# MONITORING
-# ─────────────────────────────────────────────────────────────
-
+# Monitoring
 check-sla:  ## Check SLA compliance (data health)
 	$(PYTHON) scripts/check_sla.py
 
@@ -167,12 +169,9 @@ ge-validate:  ## Run Great Expectations data quality checks locally (generates f
 	$(PYTHON) scripts/create_test_data.py
 	$(PYTHON) scripts/validate_data_quality.py
 
-# ─────────────────────────────────────────────────────────────
-# FULL WORKFLOWS
-# ─────────────────────────────────────────────────────────────
-
+# Full workflows
 elementary-report:  ## Generate Elementary data observability report
-	set -a && source .env && set +a && \
+	set -a; . ./.env; set +a; \
 	cd warehouse/dbt && \
 	edr report \
 	  --project-dir . \
@@ -182,18 +181,18 @@ elementary-report:  ## Generate Elementary data observability report
 	  --days-back 30 \
 	  --file-path ../../docs/elementary_report.html \
 	  --open-browser false
-	@echo "✅ Report generated: docs/elementary_report.html"
+	@echo "Report generated: docs/elementary_report.html"
 
 pipeline-daily: ingest load-raw dbt-build  ## Full daily pipeline
 
 historical-backfill:  ## Load historical validation data (2023-2024) from IDFM ZIP files
-	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py
+	@set -a; . ./.env; set +a; python3 ingestion/backfill/run_backfill.py
 
-historical-backfill-dry:  ## Dry run — download + parse only, no BigQuery writes
-	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py --dry-run
+historical-backfill-dry:  ## Dry run - download + parse only, no BigQuery writes
+	@set -a; . ./.env; set +a; python3 ingestion/backfill/run_backfill.py --dry-run
 
 historical-backfill-force:  ## Force reload all periods (even already loaded)
-	@export $$(grep -v '^#' .env | xargs) && python3 ingestion/backfill/run_backfill.py --force
+	@set -a; . ./.env; set +a; python3 ingestion/backfill/run_backfill.py --force
 
 pipeline-backfill:  ## Backfill (requires START_DATE and END_DATE)
 	@echo "Backfill from $(START_DATE) to $(END_DATE)"

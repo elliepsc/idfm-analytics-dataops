@@ -13,10 +13,11 @@ This makes the load idempotent: safe to re-run without creating duplicates.
 
 Usage:
     from load_backfill_bq import load_to_bigquery
-    load_to_bigquery(df, project_id="idfm-analytics-dev-488611")
+    load_to_bigquery(df, project_id=os.getenv("GCP_PROJECT_ID"))
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -29,11 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # BigQuery config
-PROJECT_ID = "idfm-analytics-dev-488611"
-# DATASET_RAW = "transport_staging_raw"
-DATASET_RAW = "transport_raw"
+PROJECT_ID = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
+DATASET_RAW = os.getenv("BQ_DATASET_RAW", "transport_raw")
 TABLE_TARGET = "raw_validations"
-LOCATION = "europe-west1"
+LOCATION = os.getenv("GCP_REGION", "europe-west1")
 
 # Natural key for deduplication (BigQuery column names)
 MERGE_KEY_COLS = ["date", "stop_id", "ticket_type"]
