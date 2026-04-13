@@ -318,8 +318,6 @@ def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
             f"Tâches en retard: {', '.join(missed)}\n"
             f"DAG: {dag.dag_id}"
         )
-        SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
-            text=message
-        )
+        SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(text=message)
     except Exception as e:
         logger.warning("Slack SLA alert skipped: %s", e)
