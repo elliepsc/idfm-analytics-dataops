@@ -255,7 +255,11 @@ with DAG(
 
         # Tables that MUST have rows after a successful dbt build
         critical_tables = [
-            (BQ_DATASET_CORE, "fct_validations_daily", 1_000_000),  # min 1M rows expected
+            (
+                BQ_DATASET_CORE,
+                "fct_validations_daily",
+                1_000_000,
+            ),  # min 1M rows expected
             (BQ_DATASET_ANALYTICS, "mart_network_scorecard_monthly", 10),
             (BQ_DATASET_ANALYTICS, "mart_validations_station_daily", 100),
         ]

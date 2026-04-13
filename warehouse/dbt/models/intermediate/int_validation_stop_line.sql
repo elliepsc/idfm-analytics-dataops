@@ -103,25 +103,25 @@ same_mode_stats AS (
 
 SELECT
   {{ dbt_utils.generate_surrogate_key([
-    'validation_date',
-    'stif_stop_id',
-    'ticket_type',
-    'line_id'
+    'b.validation_date',
+    'b.stif_stop_id',
+    'b.ticket_type',
+    'b.line_id'
   ]) }} AS validation_bridge_key,
 
-  validation_date,
-  validation_month,
-  stif_stop_id,
-  idfm_stop_id,
-  station_id_zdc,
-  stop_name_validation,
-  stop_name_ref,
-  line_id,
-  line_name,
-  transport_mode,
-  operator,
-  ticket_type,
-  validation_count,
+  b.validation_date,
+  b.validation_month,
+  b.stif_stop_id,
+  b.idfm_stop_id,
+  b.station_id_zdc,
+  b.stop_name_validation,
+  b.stop_name_ref,
+  b.line_id,
+  b.line_name,
+  b.transport_mode,
+  b.operator,
+  b.ticket_type,
+  b.validation_count,
 
   COALESCE(cs.candidate_line_count, 0) AS candidate_line_count,
   COALESCE(sm.same_mode_line_count, 0) AS same_mode_line_count,
