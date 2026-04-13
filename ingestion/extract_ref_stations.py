@@ -17,6 +17,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+from google.cloud import storage
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -29,12 +30,9 @@ BASE_URL = "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
 DATASET_ID = "emplacement-des-gares-idf"
 
 
-def extract_ref_stations(output_dir: Path = None) -> Path:
+def extract_ref_stations(gcs_bucket: str = None) -> str:
     """Extract all stations with id_ref_zdc + coordinates from IDFM API."""
-    if output_dir is None:
-        output_dir = PROJECT_ROOT / "ingestion" / "data" / "bronze" / "referentials"
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
 
     url = f"{BASE_URL}/catalog/datasets/{DATASET_ID}/records"
     params: dict[str, str | int] = {
@@ -77,13 +75,24 @@ def extract_ref_stations(output_dir: Path = None) -> Path:
         if int(params["offset"]) >= int(total):
             break
 
-    output_file = output_dir / f"ref_stations_{datetime.now().strftime('%Y%m%d')}.json"
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(all_records, f, ensure_ascii=False, indent=2)
-
-    logger.info("Extracted %d stations → %s", len(all_records), output_file)
-    return output_file
+    blob_path = f"referentials/ref_stations_{datetime.now().strftime('%Y%m%d')}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in all_records)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
+    )
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info("Extracted %d stations → %s", len(all_records), gcs_uri)
+    return gcs_uri
 
 
 if __name__ == "__main__":
-    extract_ref_stations()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Extract IDFM stations referential")
+    parser.add_argument(
+        "--bucket",
+        default=None,
+        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
+    )
+    args = parser.parse_args()
+    extract_ref_stations(args.bucket)

@@ -18,6 +18,7 @@ x-airflow-common:
     GOOGLE_APPLICATION_CREDENTIALS: /home/airflow/.config/gcloud/application_default_credentials.json
     # GCP variables — loaded from ../../.env via env_file above
     GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    GCS_BUCKET_RAW: ${GCS_BUCKET_RAW}
     BQ_DATASET_RAW: ${BQ_DATASET_RAW:-transport_raw}
     BQ_DATASET_BASE: ${BQ_DATASET_BASE:-transport}
     BQ_DATASET_CORE: ${BQ_DATASET_CORE:-transport_core}

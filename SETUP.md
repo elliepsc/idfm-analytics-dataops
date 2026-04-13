@@ -76,6 +76,7 @@ Required values in `.env`:
 ```bash
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_REGION=europe-west1
+GCS_BUCKET_RAW=idfm-analytics-raw        # GCS landing zone bucket
 BQ_DATASET_RAW=transport_raw
 BQ_DATASET_BASE=transport
 BQ_DATASET_ANALYTICS=transport_analytics
@@ -330,7 +331,8 @@ GitHub Actions connects to BigQuery via WIF — no JSON keys required.
 
 | Secret | Description |
 |---|---|
-| `GCP_PROJECT_ID` | Your GCP project ID |
+| `GCP_PROJECT_ID` | your GCP project ID |
+| `GCS_BUCKET_RAW` | GCS landing zone bucket (e.g. `idfm-analytics-raw`) |
 | `WIF_PROVIDER` | `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider` |
 | `WIF_SERVICE_ACCOUNT` | `idfm-dataops-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com` |
 
@@ -454,10 +456,10 @@ edr report --project-dir . --profiles-dir . --profile-target default ...
 
 - [ ] Python venv created and activated
 - [ ] Dependencies installed (`pip install -r requirements.txt`)
-- [ ] `.env` configured from `.env.example`
+- [ ] `.env` configured from `.env.example` (incl. `GCS_BUCKET_RAW`)
 - [ ] `load-idfm-env` alias added to `~/.bashrc`
 - [ ] GCP authenticated via ADC (`gcloud auth application-default login`)
-- [ ] BigQuery datasets provisioned via Terraform
+- [ ] GCS bucket + BigQuery datasets provisioned (`make setup-gcp`)
 - [ ] `dbt deps` run in `warehouse/dbt/`
 - [ ] `dbt build --target dev` passes
 - [ ] Airflow running at `http://localhost:8081` (or the `AIRFLOW_HOST_PORT` you set in `.env`)

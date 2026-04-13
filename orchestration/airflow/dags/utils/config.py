@@ -7,10 +7,7 @@ INGESTION_DIR = f"{AIRFLOW_ROOT}/ingestion"
 SCRIPTS_DIR = f"{AIRFLOW_ROOT}/scripts"
 DAGS_DIR = f"{AIRFLOW_ROOT}/dags"
 
-BRONZE_DIR = f"{AIRFLOW_ROOT}/data/bronze"
-VALIDATIONS_OUTPUT_DIR = f"{BRONZE_DIR}/validations"
-PUNCTUALITY_OUTPUT_DIR = f"{BRONZE_DIR}/punctuality"
-REFERENTIALS_OUTPUT_DIR = f"{BRONZE_DIR}/referentials"
+GCS_BUCKET_RAW = os.getenv("GCS_BUCKET_RAW", "idfm-analytics-raw")
 
 DBT_PROJECT_DIR = f"{AIRFLOW_ROOT}/warehouse/dbt"
 DBT_PROFILES_DIR = DBT_PROJECT_DIR

@@ -1,9 +1,9 @@
-# Dataset and table setup script for BigQuery - creates datasets and tables if they don't exist
+# GCP setup script: BigQuery datasets/tables + GCS raw landing zone
 import logging
 import os
 
 from dotenv import load_dotenv
-from google.cloud import bigquery
+from google.cloud import bigquery, storage
 from google.cloud.exceptions import NotFound
 
 logging.basicConfig(
@@ -109,5 +109,23 @@ def setup_bigquery():
     logger.info("BigQuery setup complete")
 
 
+def setup_gcs():
+    """Create GCS raw landing zone bucket if it doesn't exist."""
+    project_id = os.getenv("GCP_PROJECT_ID")
+    bucket_name = os.getenv("GCS_BUCKET_RAW", "idfm-analytics-raw")
+    region = os.getenv("GCP_REGION", "europe-west1")
+
+    client = storage.Client(project=project_id)
+
+    bucket = client.bucket(bucket_name)
+    if bucket.exists():
+        logger.info(f"Bucket gs://{bucket_name} already exists")
+        return
+
+    bucket = client.create_bucket(bucket_name, location=region)
+    logger.info(f"Created bucket gs://{bucket_name} in {region}")
+
+
 if __name__ == "__main__":
     setup_bigquery()
+    setup_gcs()

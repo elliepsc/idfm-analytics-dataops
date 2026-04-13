@@ -20,13 +20,13 @@ The project ingests, transforms, and serves Paris public transport data (IDFM ne
 
 ### ✅ Cloud — GCP (4/4)
 
-**Where to look**: `terraform/` · `orchestration/airflow/docker-compose.yml`
+**Where to look**: `terraform/` · `scripts/setup_bigquery.py` · `orchestration/airflow/docker-compose.yml`
 
 | Resource | Details |
 |----------|---------|
-| **BigQuery** | 6 datasets (`transport_raw`, `transport_staging_staging`, `transport_staging_core`, `transport_staging_analytics`, `transport_snapshots`, `transport_staging_elementary`) |
-| **GCS** | Public archive bucket `gs://idfm-backfill-sources` for reproducible backfill |
-| **Terraform IaC** | All datasets provisioned via `terraform apply` — not click-ops |
+| **BigQuery** | 6 prod datasets (`transport_raw`, `transport_staging`, `transport_core`, `transport_analytics`, `transport_snapshots`, `transport`) plus 4 dev datasets for local dbt work |
+| **GCS** | Raw landing zone bucket (`GCS_BUCKET_RAW`) for daily NDJSON + public archive bucket `gs://idfm-backfill-sources` for reproducible backfill |
+| **Provisioning** | Terraform provisions the full BigQuery dataset topology; `make setup-gcp` bootstraps the local GCS raw bucket plus required local datasets/tables |
 | **Auth** | Workload Identity Federation (WIF) in CI + ADC locally — no JSON key stored |
 
 ```bash
@@ -40,14 +40,20 @@ terraform apply
 
 ### ✅ Data Ingestion — Batch (4/4)
 
-**Where to look**: `ingestion/` · `ingestion/backfill/`
+**Where to look**: `ingestion/` · `ingestion/backfill/` · `orchestration/airflow/dags/`
 
 Two ingestion paths:
 
 **Daily pipeline** (Airflow-orchestrated):
-- `extract_validations.py`, `extract_punctuality.py`, `extract_ref_stops.py`, `extract_ref_lines.py`, `extract_ref_stations.py`
+- `extract_validations.py`, `extract_ponctuality.py`, `extract_ref_stops.py`, `extract_ref_lines.py`, `extract_ref_stop_lines.py`
 - Opendatasoft API client with pagination and retry: `odsv2_client.py`
-- `load_bigquery_raw.py` → BigQuery RAW (WRITE_TRUNCATE)
+- `load_bigquery_raw.py` loads NDJSON from GCS into BigQuery RAW via `load_table_from_uri`
+
+Daily architecture:
+
+```text
+API -> GCS raw landing zone (NDJSON) -> BigQuery transport_raw -> dbt
+```
 
 **Historical backfill** (manifest-driven, 2023–2025):
 
@@ -159,11 +165,12 @@ Reproducibility is not just the README — it is the combined result of multiple
 
 | File / Folder | Reproducibility contribution |
 |---------------|------------------------------|
+| `QUICKSTART.md` | Short reviewer path with the supported local flow and common failure modes |
 | `README.md` | Step-by-step setup guide from clone to dashboard |
 | `SETUP.md` | Detailed environment setup — dbt profiles, ADC, Airflow, aliases |
-| `.env.example` | Documents every required environment variable with descriptions |
-| `orchestration/airflow/.env.example` | Airflow-specific env variables (connections, Slack webhook) |
-| `terraform/` | All GCP datasets provisioned via `terraform apply` — zero click-ops |
+| `.env.example` | Documents the single source of truth for runtime settings (`GCS_BUCKET_RAW`, `AIRFLOW_HOST_PORT`, Airflow login, datasets) |
+| `scripts/setup_bigquery.py` | Creates required local BigQuery datasets/tables plus the raw GCS landing bucket |
+| `terraform/` | Full infra path for dataset provisioning when reviewers want the Terraform route |
 | `terraform/envs/dev.tfvars.example` | Fictitious dev values — reviewer can adapt for their own project |
 | `terraform/envs/prod.tfvars.example` | Fictitious prod values |
 | `ingestion/backfill/backfill_sources.yml` | Manifest with every historical source URL, period, and loaded status |
@@ -172,7 +179,7 @@ Reproducibility is not just the README — it is the combined result of multiple
 | `warehouse/dbt/profiles.yml` | Dev/prod/elementary targets — no hardcoded values, all from env vars |
 | `warehouse/dbt/seeds/` | Station coordinate complement — small reference data in version control |
 | `requirements.txt` | Pinned Python dependencies |
-| `orchestration/airflow/docker-compose.yml` | Airflow stack fully containerised — one command to start |
+| `orchestration/airflow/docker-compose.yml` | Airflow stack fully containerised and wired to the root `.env` — one command to start |
 
 A reviewer can reproduce the full pipeline from scratch:
 
@@ -183,33 +190,31 @@ cd idfm-analytics-dataops
 
 # 2. Configure environment
 cp .env.example .env
-# Fill in GCP_PROJECT_ID and IDFM_API_KEY
+# Fill in GCP_PROJECT_ID, GCS_BUCKET_RAW, and IDFM_API_KEY
 
 # 3. Authenticate GCP
 gcloud auth application-default login
 chmod o+r ~/.config/gcloud/application_default_credentials.json
 
-# 4. Provision infrastructure
-cd terraform && terraform init && terraform apply && cd ..
+# 4. Bootstrap local GCP resources used by the pipeline
+make setup-gcp
 
 # 5. Start Airflow
-cd orchestration/airflow && docker compose up -d && cd ../..
+make airflow-start
 
-# 6. Load environment variables
-alias load-idfm-env='set -a && source .env && set +a'
-load-idfm-env
-
-# 7. Run historical backfill (4.1M rows — downloads from public GCS + IDFM APIs)
-make historical-backfill
-
-# 8. Run dbt
-cd warehouse/dbt && dbt deps && dbt build --target prod
+# 6. Trigger the daily pipeline or the historical backfill from the Airflow UI
+# URL comes from AIRFLOW_HOST_PORT in the root .env (default: http://localhost:8081)
 ```
 
 **Reproducibility notes**:
+- `QUICKSTART.md` is the shortest supported reviewer path; `SETUP.md` is the full reference
+- Airflow, Docker Compose, and the Makefile all read the root `.env`; no separate Airflow env file is required for the supported local flow
+- `AIRFLOW_HOST_PORT` is defined once in the root `.env` and propagates to Compose, Airflow `base_url`, and helper commands
+- Local authentication is ADC-only (`gcloud auth application-default login`) — no JSON service account key should be created
+- The daily pipeline writes to a persistent GCS landing zone before loading BigQuery RAW
 - T4 2024 data is archived in a **public GCS bucket** (`gs://idfm-backfill-sources`) — no manual download needed
 - All other historical ZIPs are resolved dynamically from the IDFM catalog API at runtime
-- All GCP infrastructure is in `terraform/` — no manual dataset creation
+- Terraform remains available for the full infra path; `make setup-gcp` is the shortest bootstrap for local execution
 - `make historical-backfill-force` safely reloads all periods after any schema change (MERGE idempotent)
 - `make help` lists every available command — no tribal knowledge required
 
@@ -219,7 +224,7 @@ cd warehouse/dbt && dbt deps && dbt build --target prod
 
 **Elementary 0.23.0** — `warehouse/dbt/packages.yml`
 
-29 monitoring tables in `transport_staging_elementary` tracking model run results, test results, schema snapshots, and anomaly scores.
+29 monitoring tables in the dedicated Elementary dataset tracking model run results, test results, schema snapshots, and anomaly scores.
 
 ```bash
 make elementary-report   # generates HTML observability report
@@ -261,10 +266,11 @@ Z-score check on `validation_count` running daily in `transport_monitoring` DAG:
 | Backfill strategy | `ingestion/backfill/run_backfill.py` + `backfill_sources.yml` |
 | Terraform resources | `terraform/bigquery.tf` |
 | Airflow DAGs | `orchestration/airflow/dags/` |
+| Shared DAG runtime config | `orchestration/airflow/dags/utils/config.py` + `orchestration/airflow/dags/utils/dag_utils.py` |
 | Station map pipeline | `warehouse/dbt/models/marts/business/mart_validations_station_daily.sql` |
 | Anomaly detection | `orchestration/airflow/dags/utils/monitoring.py` |
 | CI/CD workflows | `.github/workflows/` |
-| Reproducibility steps | `README.md` — Steps to Reproduce |
+| Reproducibility steps | `QUICKSTART.md` + `SETUP.md` |
 
 ---
 

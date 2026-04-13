@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from google.cloud import storage
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -160,24 +161,13 @@ def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
     return pairs
 
 
-def extract_ref_stop_lines(output_dir: Path = None) -> Path:
+def extract_ref_stop_lines(gcs_bucket: str = None) -> str:
     """
-    Main entry point: resolve file_id, download GTFS, parse, write JSON.
+    Main entry point: resolve file_id, download GTFS, parse, upload to GCS.
 
-    Returns path to the output JSON file.
+    Returns GCS URI of the uploaded file.
     """
-    if output_dir is None:
-        output_dir = (
-            PROJECT_ROOT
-            / "orchestration"
-            / "airflow"
-            / "data"
-            / "bronze"
-            / "referentials"
-        )
-
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
 
     api_key = os.getenv("IDFM_API_KEY")
     if not api_key:
@@ -212,20 +202,19 @@ def extract_ref_stop_lines(output_dir: Path = None) -> Path:
     ]
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    output_path = output_dir / f"ref_stop_lines_{timestamp}.json"
-
-    # Write as JSON array — consistent with all other extractors in this project.
-    # load_bigquery_raw.py expects [{...}, {...}] format (converted to NDJSON in memory).
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(records, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"Written {len(records):,} records to {output_path}")
+    blob_path = f"referentials/ref_stop_lines_{timestamp}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
+    )
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info(f"Uploaded {len(records):,} records to {gcs_uri}")
 
     # Step 6: Extract TN_PA stop ID mapping (STIF code -> IDFM stop_id)
     # Bridges fct_validations_daily (STIF stop_ids) with stg_ref_stop_lines (IDFM stop_ids)
-    extract_stop_id_mapping(gtfs_bytes, output_dir)
+    extract_stop_id_mapping(gtfs_bytes, bucket_name)
 
-    return output_path
+    return gcs_uri
 
 
 if __name__ == "__main__":
@@ -233,16 +222,15 @@ if __name__ == "__main__":
         description="Extract IDFM stop-to-line mapping from GTFS feed"
     )
     parser.add_argument(
-        "--output",
-        type=Path,
+        "--bucket",
         default=None,
-        help="Output directory for JSON file (default: data/bronze/referentials)",
+        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
     )
     args = parser.parse_args()
-    extract_ref_stop_lines(output_dir=args.output)
+    extract_ref_stop_lines(gcs_bucket=args.bucket)
 
 
-def extract_stop_id_mapping(zip_bytes: bytes, output_dir: Path) -> Path:
+def extract_stop_id_mapping(zip_bytes: bytes, bucket_name: str) -> str:
     """
     Extract TN_PA stop ID mapping from object_codes_extension.txt.
 
@@ -288,10 +276,11 @@ def extract_stop_id_mapping(zip_bytes: bytes, output_dir: Path) -> Path:
     ]
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    output_path = output_dir / f"ref_stop_id_mapping_{timestamp}.json"
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(records, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"Written {len(records):,} records to {output_path}")
-    return output_path
+    blob_path = f"referentials/ref_stop_id_mapping_{timestamp}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
+    )
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info(f"Uploaded {len(records):,} records to {gcs_uri}")
+    return gcs_uri

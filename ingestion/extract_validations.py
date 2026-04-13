@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from google.cloud import storage
 from odsv2_client import ODSv2Client
 
 logging.basicConfig(
@@ -43,14 +44,14 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def extract_validations(start_date: str, end_date: str, output_dir: Path = None):
+def extract_validations(start_date: str, end_date: str, gcs_bucket: str = None):
     """
     Extract rail network ticket validations between two dates.
 
     Args:
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
-        output_dir: Output directory (default: PROJECT_ROOT/data/bronze/validations)
+        gcs_bucket: GCS bucket name (default: GCS_BUCKET_RAW env var)
     """
     config = load_config()
     idfm_config = config["idfm"]
@@ -90,19 +91,14 @@ def extract_validations(start_date: str, end_date: str, output_dir: Path = None)
         extracted_record["source"] = "idfm_validations_rail"
         extracted.append(extracted_record)
 
-    # FIX V2: default output path anchored to PROJECT_ROOT, not working directory
-    output_path = (
-        Path(output_dir) if output_dir else PROJECT_ROOT / "data/bronze/validations"
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
+    blob_path = f"validations/validations_{start_date}_{end_date}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in extracted)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
     )
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    filename = f"validations_{start_date}_{end_date}.json"
-    filepath = output_path / filename
-
-    with open(filepath, "w") as f:
-        json.dump(extracted, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"✅ Saved {len(extracted)} records to {filepath}")
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info(f"✅ Uploaded {len(extracted)} records to {gcs_uri}")
 
 
 def main():
@@ -118,13 +114,13 @@ Example usage:
     parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
     parser.add_argument(
-        "--output",
+        "--bucket",
         default=None,
-        help="Output directory (default: PROJECT_ROOT/data/bronze/validations)",
+        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
     )
 
     args = parser.parse_args()
-    extract_validations(args.start, args.end, args.output)
+    extract_validations(args.start, args.end, args.bucket)
 
 
 if __name__ == "__main__":

@@ -88,9 +88,16 @@ Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data 
 ┌──────────────────────────────────────────────────────────────────┐
 │                         IDFM APIs                                │
 │   API Validations · API Ponctualité · API Référentiels           │
-│   + Historical backfill (2023–2025, ~2.3M rows initial)                  │
+│   + Historical backfill (2023–2025, ~2.3M rows initial)          │
 └─────────────────────┬────────────────────────────────────────────┘
-                      │ Python (pagination, retry, rate limiting)
+                      │ Python (stream to memory — no local disk)
+                      ▼
+┌──────────────────────────────────────────────────────────────────┐
+│           LANDING ZONE — GCS (persistent, auditable)             │
+│         gs://idfm-analytics-raw/  (NDJSON, append-only)          │
+│   validations/ · punctuality/ · referentials/                    │
+└─────────────────────┬────────────────────────────────────────────┘
+                      │ load_table_from_uri (BigQuery native)
                       ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │               BRONZE — Raw Layer                                 │
@@ -149,11 +156,11 @@ The pipeline runs at **2 AM daily** to ensure previous day's data is available. 
 
 | Script | Source | Volume | Strategy |
 |--------|--------|--------|---------|
-| `extract_validations.py` | IDFM Validations API | ~15k records/day | Paginated GET, date filter |
-| `extract_punctuality.py` | Transilien Punctuality API | 156 records/month | Full monthly extract |
-| `extract_ref_stops.py` | IDFM Stops API | ~73k records | Full refresh weekly |
-| `extract_ref_lines.py` | IDFM Lines API | ~2100 lines | Full refresh weekly |
-| `load_bigquery_raw.py` | Local JSON | All above | WRITE_TRUNCATE → RAW |
+| `extract_validations.py` | IDFM Validations API | ~15k records/day | Paginated GET → stream NDJSON → GCS |
+| `extract_punctuality.py` | Transilien Punctuality API | 156 records/month | Full monthly extract → GCS |
+| `extract_ref_stops.py` | IDFM Stops API | ~73k records | Full refresh → GCS |
+| `extract_ref_lines.py` | IDFM Lines API | ~2100 lines | Full refresh → GCS |
+| `load_bigquery_raw.py` | GCS (`gs://idfm-analytics-raw/`) | All above | `load_table_from_uri` → BigQuery RAW |
 
 ### DAG 1: `transport_daily_pipeline`
 **Schedule**: daily at 2 AM · **Average duration**: ~3 min
@@ -167,10 +174,10 @@ extract_referentials  ─┘
 
 | Task | Operator | Description |
 |------|----------|-------------|
-| `extract_validations` | PythonOperator | Fetch ticket validations from IDFM API → JSON |
-| `extract_punctuality` | PythonOperator | Fetch Transilien punctuality data → JSON |
-| `extract_referentials` | PythonOperator | Fetch stops and lines reference data → JSON |
-| `load_bigquery_raw` | PythonOperator | Load JSON → BigQuery RAW (WRITE_TRUNCATE) |
+| `extract_validations` | PythonOperator | Fetch ticket validations from IDFM API → stream NDJSON → GCS |
+| `extract_punctuality` | PythonOperator | Fetch Transilien punctuality data → stream NDJSON → GCS |
+| `extract_referentials` | PythonOperator | Fetch stops and lines reference data → stream NDJSON → GCS |
+| `load_bigquery_raw` | PythonOperator | GCS → BigQuery RAW via `load_table_from_uri` |
 | `dbt_deps` | BashOperator | Install dbt packages before the build step |
 | `dbt_build` | BashOperator | Run dbt models + tests after dependencies are installed |
 | `verify_row_counts` | PythonOperator | Blocking guard that fails early if critical tables are empty |
@@ -650,6 +657,7 @@ flowchart TD
         EV[extract_validations.py]
         EP[extract_punctuality.py]
         ER[extract_ref_stops/lines.py]
+        GCS[(GCS Landing Zone\ngs://idfm-analytics-raw\nNDJSON · persistent)]
         LBQ[load_bigquery_raw.py]
     end
 
@@ -711,9 +719,10 @@ flowchart TD
     API3 --> ER
     BKF --> LBQ
 
-    EV --> LBQ
-    EP --> LBQ
-    ER --> LBQ
+    EV --> GCS
+    EP --> GCS
+    ER --> GCS
+    GCS --> LBQ
 
     DAG1 --> INGESTION
     LBQ --> RV & RP & RR
@@ -761,6 +770,9 @@ At 4.1M+ rows, partitioning by `validation_date` (DAY) eliminates irrelevant par
 
 **Why ADC over a service account key?**
 More secure (no JSON file to store), GCP-recommended, and key creation was blocked by the org policy anyway.
+
+**Why GCS as landing zone before BigQuery?**
+Streaming API responses directly to GCS (in memory, no local disk) gives a persistent, auditable archive of raw files. The worker disk is ephemeral — a pod restart destroys it. GCS blobs are immutable and replayable: if BigQuery needs to be rebuilt, `load_table_from_uri` replays any date from GCS without re-calling the API. This is the standard data platform pattern for decoupling extraction from loading.
 
 **Why MERGE for the backfill?**
 Idempotency: re-running inserts 0 rows on already-loaded data. Safe to replay for full reproducibility.

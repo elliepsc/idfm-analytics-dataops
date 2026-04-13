@@ -24,6 +24,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from google.cloud import storage
 from odsv2_client import ODSv2Client
 
 logging.basicConfig(
@@ -46,14 +47,14 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def extract_punctuality(start_date: str, end_date: str, output_dir: Path = None):
+def extract_punctuality(start_date: str, end_date: str, gcs_bucket: str = None):
     """
     Extract Transilien monthly punctuality data between two dates.
 
     Args:
         start_date: Start date (YYYY-MM or YYYY-MM-DD — day part is ignored)
         end_date: End date (YYYY-MM or YYYY-MM-DD — day part is ignored)
-        output_dir: Output directory (default: PROJECT_ROOT/data/bronze/punctuality)
+        gcs_bucket: GCS bucket name (default: GCS_BUCKET_RAW env var)
     """
     config = load_config()
     transilien_config = config["transilien"]
@@ -94,19 +95,14 @@ def extract_punctuality(start_date: str, end_date: str, output_dir: Path = None)
         extracted_record["source"] = "transilien_punctuality"
         extracted.append(extracted_record)
 
-    # FIX V2: default output path anchored to PROJECT_ROOT, not working directory
-    output_path = (
-        Path(output_dir) if output_dir else PROJECT_ROOT / "data/bronze/punctuality"
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
+    blob_path = f"punctuality/punctuality_{start_month}_{end_month}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in extracted)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
     )
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    filename = f"punctuality_{start_month}_{end_month}.json"
-    filepath = output_path / filename
-
-    with open(filepath, "w") as f:
-        json.dump(extracted, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"✅ Saved {len(extracted)} records to {filepath}")
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info(f"✅ Uploaded {len(extracted)} records to {gcs_uri}")
 
 
 def main():
@@ -126,13 +122,13 @@ Example usage:
         "--end", required=True, help="End month (YYYY-MM or YYYY-MM-DD)"
     )
     parser.add_argument(
-        "--output",
+        "--bucket",
         default=None,
-        help="Output directory (default: PROJECT_ROOT/data/bronze/punctuality)",
+        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
     )
 
     args = parser.parse_args()
-    extract_punctuality(args.start, args.end, args.output)
+    extract_punctuality(args.start, args.end, args.bucket)
 
 
 if __name__ == "__main__":

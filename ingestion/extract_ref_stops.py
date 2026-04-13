@@ -32,6 +32,7 @@ import pandas as pd
 import requests
 import yaml
 from dotenv import load_dotenv
+from google.cloud import storage
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -139,15 +140,28 @@ def build_output_path(
     return output_dir / f"{effective_basename}{suffix}_{timestamp}.{extension}"
 
 
-def write_output(records: list[dict], output_path: Path, output_format: str) -> Path:
-    """Write normalized records to JSON or Parquet."""
-    if output_format == "json":
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=2, ensure_ascii=False)
+def write_output(
+    records: list[dict],
+    output_path: Path,
+    output_format: str,
+    gcs_bucket: str = None,
+) -> Path | str:
+    """Write normalized records to JSON (GCS) or Parquet (local)."""
+    if output_format == "parquet":
+        dataframe = pd.DataFrame(records)
+        dataframe.to_parquet(output_path, index=False)
         return output_path
 
-    dataframe = pd.DataFrame(records)
-    dataframe.to_parquet(output_path, index=False)
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+    if gcs_bucket:
+        blob_path = f"referentials/{output_path.name}"
+        storage.Client().bucket(gcs_bucket).blob(blob_path).upload_from_string(
+            ndjson, content_type="application/json"
+        )
+        return f"gs://{gcs_bucket}/{blob_path}"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(ndjson)
     return output_path
 
 
@@ -156,22 +170,26 @@ def extract_ref_stops(
     output_format: str = "json",
     transport_modes: list[str] | None = None,
     basename: str = "ref_stops",
-) -> Path:
+    gcs_bucket: str = None,
+) -> Path | str:
     """
     Extract the full arrets-lignes referential from the IDFM export endpoint.
 
     Args:
-        output_dir: Target directory for the extracted file.
-        output_format: json or parquet.
+        output_dir: Target directory (used for parquet or local JSON fallback).
+        output_format: json (→ GCS) or parquet (→ local).
         transport_modes: Optional filter, e.g. ['Metro', 'RER'].
         basename: File prefix. Keep default `ref_stops` for pipeline compatibility.
+        gcs_bucket: GCS bucket for JSON output (default: GCS_BUCKET_RAW env var).
     """
     config = load_config()
     idfm_config = config["idfm"]
     dataset_config = idfm_config["datasets"]["ref_stops"]
 
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
     output_path = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
-    output_path.mkdir(parents=True, exist_ok=True)
+    if output_format == "parquet" or not bucket_name:
+        output_path.mkdir(parents=True, exist_ok=True)
 
     records = download_stops_export(
         api_key=os.getenv("IDFM_API_KEY"),
@@ -191,10 +209,15 @@ def extract_ref_stops(
         output_format=output_format,
         transport_modes=transport_modes,
     )
-    write_output(normalized, final_output, output_format)
+    result = write_output(
+        normalized,
+        final_output,
+        output_format,
+        gcs_bucket=bucket_name if output_format == "json" else None,
+    )
 
-    logger.info("Saved %s normalized stops to %s", f"{len(normalized):,}", final_output)
-    return final_output
+    logger.info("Saved %s normalized stops to %s", f"{len(normalized):,}", result)
+    return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -232,6 +255,7 @@ def main():
         output_format=args.output_format,
         transport_modes=args.transport_modes,
         basename=args.basename,
+        gcs_bucket=None,  # resolved from GCS_BUCKET_RAW env var
     )
 
 

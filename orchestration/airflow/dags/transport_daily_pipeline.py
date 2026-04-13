@@ -21,12 +21,10 @@ from utils.config import (
     BQ_DATASET_ANALYTICS,
     BQ_DATASET_CORE,
     GCP_PROJECT_ID,
+    GCS_BUCKET_RAW,
     INGESTION_DIR,
-    PUNCTUALITY_OUTPUT_DIR,
-    REFERENTIALS_OUTPUT_DIR,
     SCRIPTS_DIR,
     SLACK_WEBHOOK_CONN_ID,
-    VALIDATIONS_OUTPUT_DIR,
     dbt_command,
     dbt_env,
 )
@@ -65,7 +63,7 @@ def extract_validations(**context):
     extract_validations(
         start_date=execution_date,
         end_date=execution_date,
-        output_dir=VALIDATIONS_OUTPUT_DIR,
+        gcs_bucket=GCS_BUCKET_RAW,
     )
     print(f"✅ Validations extracted for {execution_date}")
 
@@ -84,7 +82,7 @@ def extract_punctuality(**context):
     mod.extract_punctuality(
         start_date=month_start,
         end_date=execution_date,
-        output_dir=PUNCTUALITY_OUTPUT_DIR,
+        gcs_bucket=GCS_BUCKET_RAW,
     )
     print(f"✅ Punctuality extracted for month starting {month_start}")
 
@@ -106,16 +104,15 @@ def extract_referentials(**context):
     from extract_ref_stop_lines import extract_ref_stop_lines
     from extract_ref_stops import extract_ref_stops
 
-    output_dir = REFERENTIALS_OUTPUT_DIR
-    extract_ref_stops(output_dir=output_dir)
-    extract_ref_lines(output_dir=output_dir)
+    extract_ref_stops(gcs_bucket=GCS_BUCKET_RAW)
+    extract_ref_lines(gcs_bucket=GCS_BUCKET_RAW)
 
     # GTFS extraction — requires IDFM_API_KEY env var
     # If the key is missing or the download fails, log a warning and continue.
     # The pipeline must not fail because of a missing stop_lines refresh —
     # the existing BigQuery table remains valid from the last successful run.
     try:
-        extract_ref_stop_lines(output_dir=output_dir)
+        extract_ref_stop_lines(gcs_bucket=GCS_BUCKET_RAW)
         print("✅ Reference data extracted (stops, lines, stop_lines GTFS)")
     except Exception as e:
         print(

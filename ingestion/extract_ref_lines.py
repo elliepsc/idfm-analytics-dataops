@@ -18,6 +18,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from google.cloud import storage
 from odsv2_client import ODSv2Client
 
 logging.basicConfig(
@@ -41,7 +42,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def extract_ref_lines(output_dir: Path = None):
+def extract_ref_lines(gcs_bucket: str = None):
     """Extract full lines referential from IDFM API."""
 
     config = load_config()
@@ -75,30 +76,25 @@ def extract_ref_lines(output_dir: Path = None):
         extracted_record["source"] = "idfm_ref_lines"
         extracted.append(extracted_record)
 
-    # FIX V2: default output path anchored to PROJECT_ROOT, not working directory
-    output_path = (
-        Path(output_dir) if output_dir else PROJECT_ROOT / "data/bronze/referentials"
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
+    blob_path = f"referentials/ref_lines_{datetime.now().strftime('%Y%m%d')}.json"
+    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in extracted)
+    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+        ndjson, content_type="application/json"
     )
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    filename = f"ref_lines_{datetime.now().strftime('%Y%m%d')}.json"
-    filepath = output_path / filename
-
-    with open(filepath, "w") as f:
-        json.dump(extracted, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"✅ Saved {len(extracted)} lines to {filepath}")
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+    logger.info(f"✅ Uploaded {len(extracted)} lines to {gcs_uri}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Extract IDFM lines referential")
     parser.add_argument(
-        "--output",
+        "--bucket",
         default=None,
-        help="Output directory (default: PROJECT_ROOT/data/bronze/referentials)",
+        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
     )
     args = parser.parse_args()
-    extract_ref_lines(args.output)
+    extract_ref_lines(args.bucket)
 
 
 if __name__ == "__main__":

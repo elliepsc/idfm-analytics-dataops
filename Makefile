@@ -65,7 +65,7 @@ install:  ## Install Python dependencies
 	$(PIP) install -r requirements.txt
 	cd warehouse/dbt && $(DBT) deps
 
-setup-gcp:  ## Configure BigQuery (datasets + tables)
+setup-gcp:  ## Configure GCP: BigQuery datasets + GCS raw landing zone bucket
 	$(PYTHON) scripts/setup_bigquery.py
 
 test:  ## Run unit tests
@@ -100,7 +100,7 @@ ingest-validations:  ## Ingest validations (START_DATE to END_DATE)
 	$(PYTHON) ingestion/extract_validations.py --start $(START_DATE) --end $(END_DATE)
 
 ingest-punctuality:  ## Ingest punctuality data
-	$(PYTHON) ingestion/extract_punctuality.py --start $(START_DATE) --end $(END_DATE)
+	$(PYTHON) ingestion/extract_ponctuality.py --start $(START_DATE) --end $(END_DATE)
 
 ingest-refs:  ## Ingest referentials (stops, lines, mappings)
 	$(PYTHON) ingestion/extract_ref_stops.py
