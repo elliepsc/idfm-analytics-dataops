@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from utils.config import BQ_DATASET_CORE, BQ_DATASET_RAW, SLACK_WEBHOOK_CONN_ID
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +30,7 @@ def log_dag_metric(
     z_score: Optional[float] = None,
     is_anomaly: Optional[bool] = None,
 ) -> None:
-    """Log a DAG metric in BigQuery transport_raw.dag_metrics."""
+    """Log a DAG metric in BigQuery `<dataset>.dag_metrics`."""
     try:
         from google.cloud import bigquery
 
@@ -66,6 +68,7 @@ def log_dag_metric(
 def check_validation_count_threshold(
     project_id: str,
     execution_date: str,
+    dataset_raw: str = BQ_DATASET_RAW,
     min_records: int = 100,
 ) -> bool:
     """
@@ -78,7 +81,7 @@ def check_validation_count_threshold(
         client = bigquery.Client(project=project_id)
         query = f"""
             SELECT COUNT(*) as nb
-            FROM `{project_id}.transport_raw.validations_rail`
+            FROM `{project_id}.{dataset_raw}.validations_rail`
             WHERE DATE(date) = '{execution_date}'
         """
         result = list(client.query(query).result())
@@ -104,6 +107,7 @@ def check_validation_count_threshold(
 def check_punctuality_freshness(
     project_id: str,
     execution_date: str,
+    dataset_raw: str = BQ_DATASET_RAW,
     max_lag_days: int = 45,
 ) -> bool:
     """
@@ -116,7 +120,7 @@ def check_punctuality_freshness(
         client = bigquery.Client(project=project_id)
         query = f"""
             SELECT MAX(date) as latest_date
-            FROM `{project_id}.transport_raw.punctuality_monthly`
+            FROM `{project_id}.{dataset_raw}.punctuality_monthly`
         """
         result = list(client.query(query).result())
         latest = result[0].latest_date if result else None
@@ -152,7 +156,7 @@ def check_punctuality_freshness(
 def check_statistical_anomaly(
     project_id: str,
     execution_date: str,
-    dataset_core: str = "transport_core",
+    dataset_core: str = BQ_DATASET_CORE,
     z_score_threshold: float = 2.5,
     lookback_days: int = 7,
 ) -> dict:
@@ -314,6 +318,8 @@ def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis):
             f"Tâches en retard: {', '.join(missed)}\n"
             f"DAG: {dag.dag_id}"
         )
-        SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text=message)
+        SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
+            text=message
+        )
     except Exception as e:
         logger.warning("Slack SLA alert skipped: %s", e)

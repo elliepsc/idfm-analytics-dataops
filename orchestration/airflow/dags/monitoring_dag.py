@@ -4,14 +4,21 @@ Schedule: Daily at 7 AM (after transport_daily_pipeline at 2 AM)
 """
 
 import logging
-import os
 import sys
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from utils.config import (
+    BQ_DATASET_CORE,
+    BQ_DATASET_RAW,
+    DAGS_DIR,
+    GCP_PROJECT_ID,
+    SLACK_WEBHOOK_CONN_ID,
+)
+from utils.dag_utils import register_failure_callbacks
 
-sys.path.insert(0, "/opt/airflow/dags")
+sys.path.insert(0, DAGS_DIR)
 from utils.monitoring import (  # noqa: E402
     check_punctuality_freshness,
     check_statistical_anomaly,
@@ -22,9 +29,9 @@ from utils.monitoring import (  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ID = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
-DATASET_RAW = os.getenv("BQ_DATASET_RAW", "transport_raw")
-DATASET_CORE = os.getenv("BQ_DATASET_CORE", "transport_core")
+PROJECT_ID = GCP_PROJECT_ID
+DATASET_RAW = BQ_DATASET_RAW
+DATASET_CORE = BQ_DATASET_CORE
 
 # Z-score threshold — flag as anomaly if |z| > 2.5
 # Corresponds to ~1.2% false positive rate (normal distribution)
@@ -49,6 +56,7 @@ def check_validations_threshold(**context):
     ok = check_validation_count_threshold(
         project_id=PROJECT_ID,
         execution_date=execution_date,
+        dataset_raw=DATASET_RAW,
         min_records=100,
     )
     if not ok:
@@ -61,6 +69,7 @@ def check_punctuality_lag(**context):
     ok = check_punctuality_freshness(
         project_id=PROJECT_ID,
         execution_date=execution_date,
+        dataset_raw=DATASET_RAW,
         max_lag_days=45,
     )
     if not ok:
@@ -126,7 +135,9 @@ def run_statistical_anomaly_check(**context):
         try:
             from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
-            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(text=message)
+            SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
+                text=message
+            )
             logger.warning("Anomaly Slack alert sent for %s", execution_date)
         except Exception as e:
             logger.warning("Slack anomaly alert skipped: %s", e)
@@ -166,7 +177,7 @@ def notify_monitoring_success(**context):
     try:
         from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
-        SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+        SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
             text=(
                 f"✅ *Monitoring OK* — {context['ds']}\n"
                 f"Validations: seuil OK | Ponctualité: fraîche | Anomalie: aucune"
@@ -184,7 +195,7 @@ with DAG(
     max_active_runs=1,
     sla_miss_callback=sla_miss_callback,
     tags=["monitoring", "transport", "v2"],
-    doc_md="""
+    doc_md=f"""
     ## Transport Monitoring DAG
 
     Vérifie quotidiennement la qualité et la fraîcheur des données.
@@ -199,7 +210,7 @@ with DAG(
     ### Z-score anomaly detection
     Compares today's total validations against a 7-day rolling baseline.
     Threshold: |z| > 2.5 → anomaly alert sent to Slack.
-    Results logged to transport_raw.dag_metrics (z_score, is_anomaly columns).
+    Results logged to {DATASET_RAW}.dag_metrics (z_score, is_anomaly columns).
 
     Runs at 7 AM after the main pipeline (2 AM).
     """,
@@ -246,29 +257,5 @@ with DAG(
 # ═════════════════════════════════════════════════════════════════
 
 
-def task_failure_alert(context):
-    """Send pipeline failure alert to Slack — separate from z-score anomaly alerts.
-    Pipeline failures → #idfm-pipeline-alerts
-    Z-score anomalies → #idfm-anomaly-alerts (handled in notify_monitoring_success)
-    """
-    try:
-        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-        SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
-            text=(
-                f"❌ *Monitoring DAG - FAILED*\n\n"
-                f"📅 Date: {context['ds']}\n"
-                f"🔧 Task: {context['task_instance'].task_id}\n"
-                f"⚠️ Error: {context['exception']}\n"
-                f"🔗 Log: {context['task_instance'].log_url}"
-            )
-        )
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning("Slack pipeline alert skipped: %s", e)
-
-
-# Apply failure callback to all monitoring tasks
-for task in dag.tasks:
-    task.on_failure_callback = task_failure_alert
+# task_failure_alert moved to dag_utils.py
+register_failure_callbacks(dag)

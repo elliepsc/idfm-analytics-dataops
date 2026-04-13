@@ -14,13 +14,17 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__WEBSERVER__BASE_URL: http://localhost:${AIRFLOW_HOST_PORT:-8081}
     GOOGLE_APPLICATION_CREDENTIALS: /home/airflow/.config/gcloud/application_default_credentials.json
     # GCP variables — loaded from ../../.env via env_file above
     GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     BQ_DATASET_RAW: ${BQ_DATASET_RAW:-transport_raw}
     BQ_DATASET_BASE: ${BQ_DATASET_BASE:-transport}
-    BQ_DATASET_ANALYTICS: transport_analytics
+    BQ_DATASET_CORE: ${BQ_DATASET_CORE:-transport_core}
+    BQ_DATASET_ANALYTICS: ${BQ_DATASET_ANALYTICS:-transport_analytics}
     GOOGLE_CLOUD_PROJECT: ${GCP_PROJECT_ID}
+    SLACK_WEBHOOK_CONN_ID: "${SLACK_WEBHOOK_CONN_ID:-slack_webhook}"
+    SLACK_ALERT_CHANNEL: "${SLACK_ALERT_CHANNEL:-#data-alerts}"
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
@@ -59,7 +63,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8081:8080"
+      - "${AIRFLOW_HOST_PORT:-8081}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s

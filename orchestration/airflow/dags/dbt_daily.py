@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+from utils.config import SLACK_WEBHOOK_CONN_ID, dbt_command, dbt_env
+from utils.dag_utils import register_failure_callbacks
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -49,17 +51,8 @@ with DAG(
 
     dbt_deps = BashOperator(
         task_id="dbt_deps",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt deps --profiles-dir . --profile transport
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("deps --profiles-dir . --profile transport"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -68,17 +61,8 @@ with DAG(
 
     dbt_run_staging = BashOperator(
         task_id="dbt_run_staging",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt run --target prod --select staging
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("run --target prod --select staging"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -87,17 +71,8 @@ with DAG(
 
     dbt_run_core = BashOperator(
         task_id="dbt_run_core",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt run --target prod --select core
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("run --target prod --select core"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -106,17 +81,8 @@ with DAG(
 
     dbt_run_marts = BashOperator(
         task_id="dbt_run_marts",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt run --target prod --select marts
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("run --target prod --select marts"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -125,17 +91,8 @@ with DAG(
 
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt test --target prod
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("test --target prod"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -144,17 +101,8 @@ with DAG(
 
     dbt_docs_generate = BashOperator(
         task_id="dbt_docs_generate",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt docs generate --target prod
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("docs generate --target prod"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -165,7 +113,7 @@ with DAG(
         try:
             from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
-            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+            SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
                 text="dbt Daily SUCCESS"
             )
         except Exception as e:
@@ -200,24 +148,5 @@ with DAG(
 # ═════════════════════════════════════════════════════════════════
 
 
-def task_failure_alert(context):
-    """Send alert on task failure"""
-    from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-    slack_hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
-    message = f"""
-❌ *dbt Daily Build - FAILED*
-
-📅 Date: {context['ds']}
-🔧 Task: {context['task_instance'].task_id}
-⚠️ Error: {context['exception']}
-🔗 Log: {context['task_instance'].log_url}
-    """
-
-    slack_hook.send(text=message, channel="#data-alerts")
-
-
-# Apply failure callback to all tasks
-for task in dag.tasks:
-    task.on_failure_callback = task_failure_alert
+# task_failure_alert moved to dag_utils.py
+register_failure_callbacks(dag)

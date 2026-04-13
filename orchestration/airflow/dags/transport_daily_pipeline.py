@@ -17,6 +17,20 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+from utils.config import (
+    BQ_DATASET_ANALYTICS,
+    BQ_DATASET_CORE,
+    GCP_PROJECT_ID,
+    INGESTION_DIR,
+    PUNCTUALITY_OUTPUT_DIR,
+    REFERENTIALS_OUTPUT_DIR,
+    SCRIPTS_DIR,
+    SLACK_WEBHOOK_CONN_ID,
+    VALIDATIONS_OUTPUT_DIR,
+    dbt_command,
+    dbt_env,
+)
+from utils.dag_utils import register_failure_callbacks
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -42,7 +56,7 @@ def extract_validations(**context):
     """Extract ticket validation data from IDFM API"""
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from extract_validations import extract_validations
 
     # Get execution date (yesterday for daily run)
@@ -51,7 +65,7 @@ def extract_validations(**context):
     extract_validations(
         start_date=execution_date,
         end_date=execution_date,
-        output_dir="/opt/airflow/data/bronze/validations",
+        output_dir=VALIDATIONS_OUTPUT_DIR,
     )
     print(f"✅ Validations extracted for {execution_date}")
 
@@ -60,7 +74,7 @@ def extract_punctuality(**context):
     """Extract train punctuality data from Transilien API"""
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     import extract_ponctuality as mod
 
     execution_date = context["ds"]
@@ -70,7 +84,7 @@ def extract_punctuality(**context):
     mod.extract_punctuality(
         start_date=month_start,
         end_date=execution_date,
-        output_dir="/opt/airflow/data/bronze/punctuality",
+        output_dir=PUNCTUALITY_OUTPUT_DIR,
     )
     print(f"✅ Punctuality extracted for month starting {month_start}")
 
@@ -87,12 +101,12 @@ def extract_referentials(**context):
     """
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from extract_ref_lines import extract_ref_lines
     from extract_ref_stop_lines import extract_ref_stop_lines
     from extract_ref_stops import extract_ref_stops
 
-    output_dir = "/opt/airflow/data/bronze/referentials"
+    output_dir = REFERENTIALS_OUTPUT_DIR
     extract_ref_stops(output_dir=output_dir)
     extract_ref_lines(output_dir=output_dir)
 
@@ -114,7 +128,7 @@ def load_to_bigquery(**context):
     """Load JSON files to BigQuery RAW tables"""
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from load_bigquery_raw import BigQueryLoader
 
     loader = BigQueryLoader()
@@ -127,7 +141,7 @@ def check_sla(**context):
     """Validate data quality: freshness, completeness, validity"""
     import sys
 
-    sys.path.insert(0, "/opt/airflow/scripts")
+    sys.path.insert(0, SCRIPTS_DIR)
     from check_sla import check_sla
 
     exit_code = check_sla()
@@ -199,17 +213,8 @@ with DAG(
 
     dbt_deps_task = BashOperator(
         task_id="dbt_deps",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt deps
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command("deps"),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -218,17 +223,10 @@ with DAG(
 
     dbt_build_task = BashOperator(
         task_id="dbt_build",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt build --target prod --select +marts dim_stop stg_ref_stops
-        """,
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        bash_command=dbt_command(
+            "build --target prod --select +marts dim_stop stg_ref_stops"
+        ),
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -252,31 +250,26 @@ with DAG(
     def verify_row_counts(**context):
         """Blocking gate: fails the pipeline if critical tables are empty after dbt build."""
         import logging
-        import os
 
         logger = logging.getLogger(__name__)
 
-        project_id = os.getenv("GCP_PROJECT_ID", "idfm-analytics-dev-488611")
-        dataset_core = os.getenv("BQ_DATASET_BASE", "transport") + "_core"
-        dataset_analytics = os.getenv("BQ_DATASET_BASE", "transport") + "_analytics"
-
         # Tables that MUST have rows after a successful dbt build
         critical_tables = [
-            (dataset_core, "fct_validations_daily", 1_000_000),  # min 1M rows expected
-            (dataset_analytics, "mart_network_scorecard_monthly", 10),
-            (dataset_analytics, "mart_validations_station_daily", 100),
+            (BQ_DATASET_CORE, "fct_validations_daily", 1_000_000),  # min 1M rows expected
+            (BQ_DATASET_ANALYTICS, "mart_network_scorecard_monthly", 10),
+            (BQ_DATASET_ANALYTICS, "mart_validations_station_daily", 100),
         ]
 
         try:
             from google.cloud import bigquery
 
-            client = bigquery.Client(project=project_id)
+            client = bigquery.Client(project=GCP_PROJECT_ID)
             failures = []
 
             for dataset, table, min_rows in critical_tables:
                 query = f"""
                     SELECT COUNT(*) AS row_count
-                    FROM `{project_id}.{dataset}.{table}`
+                    FROM `{GCP_PROJECT_ID}.{dataset}.{table}`
                 """
                 result = list(client.query(query).result())
                 row_count = result[0].row_count if result else 0
@@ -322,7 +315,7 @@ with DAG(
         try:
             from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
-            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+            SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
                 text="Pipeline SUCCESS"
             )
         except Exception as e:
@@ -364,32 +357,5 @@ with DAG(
 # ═════════════════════════════════════════════════════════════════
 
 
-def task_failure_alert(context):
-    """Send Slack alert on task failure — silently skipped if Slack not configured.
-    To enable: add 'slack_webhook' connection in Airflow UI (Admin → Connections).
-    """
-    # FIX V2: wrap in try/except — Slack connection may not be configured in dev/local
-    try:
-        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-        slack_hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-        slack_hook.send(
-            text=(
-                f"❌ *Transport Daily Pipeline - FAILED*\n\n"
-                f"📅 Date: {context['ds']}\n"
-                f"🔧 Task: {context['task_instance'].task_id}\n"
-                f"⚠️ Error: {context['exception']}\n"
-                f"🔗 Log: {context['task_instance'].log_url}"
-            ),
-            channel="#data-alerts",
-        )
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning(
-            f"Slack alert skipped (slack_webhook connection not configured): {e}"
-        )
-
-
-for task in dag.tasks:
-    task.on_failure_callback = task_failure_alert
+# task_failure_alert moved to dag_utils.py
+register_failure_callbacks(dag)

@@ -17,6 +17,18 @@ import pendulum
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+from utils.config import (
+    BQ_DATASET_RAW,
+    GCP_PROJECT_ID,
+    INGESTION_DIR,
+    PUNCTUALITY_OUTPUT_DIR,
+    REFERENTIALS_OUTPUT_DIR,
+    SLACK_WEBHOOK_CONN_ID,
+    VALIDATIONS_OUTPUT_DIR,
+    dbt_command,
+    dbt_env,
+)
+from utils.dag_utils import register_failure_callbacks
 
 # ═════════════════════════════════════════════════════════════════
 # Configuration
@@ -45,7 +57,7 @@ def extract_validations_backfill(**context):
     """
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from extract_validations import extract_validations
 
     # Get date range from DAG run config
@@ -58,7 +70,7 @@ def extract_validations_backfill(**context):
     extract_validations(
         start_date=start_date,
         end_date=end_date,
-        output_dir="/opt/airflow/data/bronze/validations",
+        output_dir=VALIDATIONS_OUTPUT_DIR,
     )
 
     print(f"✅ Validations backfill complete: {start_date} to {end_date}")
@@ -71,7 +83,7 @@ def extract_punctuality_backfill(**context):
     """
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     import extract_ponctuality as mod
 
     # Get date range from DAG run config
@@ -95,7 +107,7 @@ def extract_punctuality_backfill(**context):
         mod.extract_punctuality(
             start_date=month_start,
             end_date=month_end,
-            output_dir="/opt/airflow/data/bronze/punctuality",
+            output_dir=PUNCTUALITY_OUTPUT_DIR,
         )
 
         current = current.add(months=1)
@@ -110,14 +122,14 @@ def extract_referentials_backfill(**context):
     """
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from extract_ref_lines import extract_ref_lines
     from extract_ref_stops import extract_ref_stops
 
     print("📅 Extracting reference data (stops, lines, mappings)")
 
-    extract_ref_stops(output_dir="/opt/airflow/data/bronze/referentials")
-    extract_ref_lines(output_dir="/opt/airflow/data/bronze/referentials")
+    extract_ref_stops(output_dir=REFERENTIALS_OUTPUT_DIR)
+    extract_ref_lines(output_dir=REFERENTIALS_OUTPUT_DIR)
 
     print("✅ Reference data extraction complete")
 
@@ -126,7 +138,7 @@ def load_to_bigquery_backfill(**context):
     """Load all extracted JSON files to BigQuery RAW"""
     import sys
 
-    sys.path.insert(0, "/opt/airflow/ingestion")
+    sys.path.insert(0, INGESTION_DIR)
     from load_bigquery_raw import BigQueryLoader
 
     print("📥 Loading all JSON files to BigQuery RAW")
@@ -152,14 +164,14 @@ def validate_backfill(**context):
     start_date = pendulum.parse(start_date_str)
     end_date = pendulum.parse(end_date_str)
 
-    client = bigquery.Client()
+    client = bigquery.Client(project=GCP_PROJECT_ID)
 
     # Count records per date
     query = f"""
     SELECT
         date,
         COUNT(*) as record_count
-    FROM `transport_raw.raw_validations`
+    FROM `{GCP_PROJECT_ID}.{BQ_DATASET_RAW}.raw_validations`
     WHERE date BETWEEN '{start_date_str}' AND '{end_date_str}'
     GROUP BY date
     ORDER BY date
@@ -245,28 +257,17 @@ with DAG(
 
     dbt_deps_task = BashOperator(
         task_id="dbt_deps",
-        bash_command="cd /opt/airflow/warehouse/dbt && /home/airflow/.local/bin/dbt deps",
+        bash_command=dbt_command("deps"),
         retries=0,  # deps failure = real network/package issue, don't mask it
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-        },
+        env=dbt_env(),
     )
 
     dbt_build_task = BashOperator(
         task_id="dbt_build_full_refresh",
-        bash_command="""
-            cd /opt/airflow/warehouse/dbt && \
-            /home/airflow/.local/bin/dbt build --target prod --full-refresh
-        """,
+        bash_command=dbt_command("build --target prod --full-refresh"),
         retries=1,
         retry_delay=timedelta(minutes=2),
-        env={
-            "DBT_PROFILES_DIR": "/opt/airflow/warehouse/dbt",
-            "GCP_PROJECT_ID": "idfm-analytics-dev-488611",
-            "BQ_DATASET_RAW": "transport_raw",
-            "BQ_DATASET_BASE": "transport",
-            "BQ_DATASET_ANALYTICS": "transport_analytics",
-        },
+        env=dbt_env(),
     )
 
     # ─────────────────────────────────────────────────────────────
@@ -287,7 +288,7 @@ with DAG(
         try:
             from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
-            SlackWebhookHook(slack_webhook_conn_id="slack_webhook").send(
+            SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
                 text="Backfill SUCCESS"
             )
         except Exception as e:
@@ -327,24 +328,5 @@ with DAG(
 # ═════════════════════════════════════════════════════════════════
 
 
-def task_failure_alert(context):
-    """Send alert on task failure"""
-    from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-    slack_hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
-    message = f"""
-❌ *Transport Backfill - FAILED*
-
-📅 Date Range: {context['dag_run'].conf.get('start_date')} to {context['dag_run'].conf.get('end_date')}
-🔧 Task: {context['task_instance'].task_id}
-⚠️ Error: {context['exception']}
-🔗 Log: {context['task_instance'].log_url}
-    """
-
-    slack_hook.send(text=message, channel="#data-alerts")
-
-
-# Apply failure callback to all tasks
-for task in dag.tasks:
-    task.on_failure_callback = task_failure_alert
+# task_failure_alert moved to dag_utils.py
+register_failure_callbacks(dag)
