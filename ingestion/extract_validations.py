@@ -35,6 +35,7 @@ load_dotenv()
 # This pattern ensures output always lands in data/bronze/validations/ at project root,
 # regardless of which directory you call the script from.
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).parent.parent))
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "bronze" / "validations"
 
 
 def load_config():
@@ -44,14 +45,45 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def extract_validations(start_date: str, end_date: str, gcs_bucket: str = None):
+def build_output_path(output_dir: Path, start_date: str, end_date: str) -> Path:
+    """Build the local output path for validations extracts."""
+    return output_dir / f"validations_{start_date}_{end_date}.json"
+
+
+def write_output(
+    records: list[dict],
+    output_path: Path,
+    gcs_bucket: str | None = None,
+) -> Path | str:
+    """Write extracted rows to local JSON or upload NDJSON to GCS."""
+    if gcs_bucket:
+        blob_path = f"validations/{output_path.name}"
+        ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+        storage.Client().bucket(gcs_bucket).blob(blob_path).upload_from_string(
+            ndjson, content_type="application/json"
+        )
+        return f"gs://{gcs_bucket}/{blob_path}"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False)
+    return output_path
+
+
+def extract_validations(
+    start_date: str,
+    end_date: str,
+    output_dir: str | Path | None = None,
+    gcs_bucket: str | None = None,
+):
     """
     Extract rail network ticket validations between two dates.
 
     Args:
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
-        gcs_bucket: GCS bucket name (default: GCS_BUCKET_RAW env var)
+        output_dir: Local directory for JSON output (used by tests/local fallback)
+        gcs_bucket: GCS bucket name (default: GCS_BUCKET_RAW env var if no output_dir)
     """
     config = load_config()
     idfm_config = config["idfm"]
@@ -91,14 +123,18 @@ def extract_validations(start_date: str, end_date: str, gcs_bucket: str = None):
         extracted_record["source"] = "idfm_validations_rail"
         extracted.append(extracted_record)
 
-    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
-    blob_path = f"validations/validations_{start_date}_{end_date}.json"
-    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in extracted)
-    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
-        ndjson, content_type="application/json"
+    bucket_name = (
+        gcs_bucket
+        if gcs_bucket is not None
+        else (None if output_dir is not None else os.getenv("GCS_BUCKET_RAW"))
     )
-    gcs_uri = f"gs://{bucket_name}/{blob_path}"
-    logger.info(f"✅ Uploaded {len(extracted)} records to {gcs_uri}")
+    local_output_dir = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
+    result = write_output(
+        extracted,
+        build_output_path(local_output_dir, start_date, end_date),
+        gcs_bucket=bucket_name,
+    )
+    logger.info("Saved %d validation records to %s", len(extracted), result)
 
 
 def main():
@@ -114,13 +150,23 @@ Example usage:
     parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
     parser.add_argument(
+        "--output",
+        default=None,
+        help="Local output directory (default: PROJECT_ROOT/data/bronze/validations)",
+    )
+    parser.add_argument(
         "--bucket",
         default=None,
         help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
     )
 
     args = parser.parse_args()
-    extract_validations(args.start, args.end, args.bucket)
+    extract_validations(
+        args.start,
+        args.end,
+        output_dir=args.output,
+        gcs_bucket=args.bucket,
+    )
 
 
 if __name__ == "__main__":

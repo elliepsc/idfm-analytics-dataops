@@ -152,16 +152,16 @@ def write_output(
         dataframe.to_parquet(output_path, index=False)
         return output_path
 
-    ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
     if gcs_bucket:
         blob_path = f"referentials/{output_path.name}"
+        ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
         storage.Client().bucket(gcs_bucket).blob(blob_path).upload_from_string(
             ndjson, content_type="application/json"
         )
         return f"gs://{gcs_bucket}/{blob_path}"
 
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(ndjson)
+        json.dump(records, f, ensure_ascii=False)
     return output_path
 
 
@@ -186,7 +186,11 @@ def extract_ref_stops(
     idfm_config = config["idfm"]
     dataset_config = idfm_config["datasets"]["ref_stops"]
 
-    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
+    bucket_name = (
+        gcs_bucket
+        if gcs_bucket is not None
+        else (None if output_dir is not None else os.getenv("GCS_BUCKET_RAW"))
+    )
     output_path = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
     if output_format == "parquet" or not bucket_name:
         output_path.mkdir(parents=True, exist_ok=True)
