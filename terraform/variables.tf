@@ -14,3 +14,9 @@ variable "location" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "gcs_bucket_raw" {
+  description = "GCS bucket name for the raw NDJSON landing zone"
+  type        = string
+  default     = "idfm-analytics-raw"
+}

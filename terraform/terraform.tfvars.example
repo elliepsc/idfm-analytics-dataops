@@ -1,3 +1,4 @@
-project_id = "your-gcp-project-id"
-region     = "europe-west1"
-location   = "europe-west1"
+project_id     = "your-gcp-project-id"
+region         = "europe-west1"
+location       = "europe-west1"
+gcs_bucket_raw = "idfm-analytics-raw"
