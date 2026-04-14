@@ -161,11 +161,11 @@ def stream_stop_line_pairs(zip_bytes: bytes, trip_to_route: dict) -> set:
     return pairs
 
 
-def extract_ref_stop_lines(gcs_bucket: str = None) -> str:
+def extract_ref_stop_lines(gcs_bucket: str = None, output_dir=None) -> str:
     """
-    Main entry point: resolve file_id, download GTFS, parse, upload to GCS.
+    Main entry point: resolve file_id, download GTFS, parse, upload to GCS or write locally.
 
-    Returns GCS URI of the uploaded file.
+    Returns GCS URI or local path of the output file.
     """
     bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
 
@@ -202,19 +202,31 @@ def extract_ref_stop_lines(gcs_bucket: str = None) -> str:
     ]
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    blob_path = f"referentials/ref_stop_lines_{timestamp}.json"
+    filename = f"ref_stop_lines_{timestamp}.json"
     ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
-    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
-        ndjson, content_type="application/json"
-    )
-    gcs_uri = f"gs://{bucket_name}/{blob_path}"
-    logger.info(f"Uploaded {len(records):,} records to {gcs_uri}")
+
+    if bucket_name:
+        blob_path = f"referentials/{filename}"
+        storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+            ndjson, content_type="application/json"
+        )
+        result = f"gs://{bucket_name}/{blob_path}"
+    else:
+        local_dir = (
+            Path(output_dir)
+            if output_dir
+            else PROJECT_ROOT / "data/bronze/referentials"
+        )
+        local_dir.mkdir(parents=True, exist_ok=True)
+        result = str(local_dir / filename)
+        with open(result, "w", encoding="utf-8") as f:
+            f.write(ndjson)
+    logger.info(f"Written {len(records):,} records to {result}")
 
     # Step 6: Extract TN_PA stop ID mapping (STIF code -> IDFM stop_id)
-    # Bridges fct_validations_daily (STIF stop_ids) with stg_ref_stop_lines (IDFM stop_ids)
-    extract_stop_id_mapping(gtfs_bytes, bucket_name)
+    extract_stop_id_mapping(gtfs_bytes, bucket_name=bucket_name, output_dir=output_dir)
 
-    return gcs_uri
+    return result
 
 
 if __name__ == "__main__":
@@ -222,15 +234,18 @@ if __name__ == "__main__":
         description="Extract IDFM stop-to-line mapping from GTFS feed"
     )
     parser.add_argument(
-        "--bucket",
-        default=None,
-        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
+        "--bucket", default=None, help="GCS bucket (default: GCS_BUCKET_RAW env var)"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Local output dir (fallback when no GCS)"
     )
     args = parser.parse_args()
-    extract_ref_stop_lines(gcs_bucket=args.bucket)
+    extract_ref_stop_lines(gcs_bucket=args.bucket, output_dir=args.output)
 
 
-def extract_stop_id_mapping(zip_bytes: bytes, bucket_name: str) -> str:
+def extract_stop_id_mapping(
+    zip_bytes: bytes, bucket_name: str = None, output_dir=None
+) -> str:
     """
     Extract TN_PA stop ID mapping from object_codes_extension.txt.
 
@@ -276,11 +291,25 @@ def extract_stop_id_mapping(zip_bytes: bytes, bucket_name: str) -> str:
     ]
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    blob_path = f"referentials/ref_stop_id_mapping_{timestamp}.json"
+    filename = f"ref_stop_id_mapping_{timestamp}.json"
     ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
-    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
-        ndjson, content_type="application/json"
-    )
-    gcs_uri = f"gs://{bucket_name}/{blob_path}"
-    logger.info(f"Uploaded {len(records):,} records to {gcs_uri}")
-    return gcs_uri
+
+    if bucket_name:
+        blob_path = f"referentials/{filename}"
+        storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+            ndjson, content_type="application/json"
+        )
+        result = f"gs://{bucket_name}/{blob_path}"
+    else:
+        local_dir = (
+            Path(output_dir)
+            if output_dir
+            else PROJECT_ROOT / "data/bronze/referentials"
+        )
+        local_dir.mkdir(parents=True, exist_ok=True)
+        result = str(local_dir / filename)
+        with open(result, "w", encoding="utf-8") as f:
+            f.write(ndjson)
+
+    logger.info(f"Written {len(records):,} records to {result}")
+    return result

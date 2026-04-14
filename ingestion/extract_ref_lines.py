@@ -42,7 +42,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def extract_ref_lines(gcs_bucket: str = None):
+def extract_ref_lines(gcs_bucket: str = None, output_dir: Path = None):
     """Extract full lines referential from IDFM API."""
 
     config = load_config()
@@ -76,25 +76,41 @@ def extract_ref_lines(gcs_bucket: str = None):
         extracted_record["source"] = "idfm_ref_lines"
         extracted.append(extracted_record)
 
-    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
-    blob_path = f"referentials/ref_lines_{datetime.now().strftime('%Y%m%d')}.json"
+    filename = f"ref_lines_{datetime.now().strftime('%Y%m%d')}.json"
     ndjson = "\n".join(json.dumps(r, ensure_ascii=False) for r in extracted)
-    storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
-        ndjson, content_type="application/json"
-    )
-    gcs_uri = f"gs://{bucket_name}/{blob_path}"
-    logger.info(f"✅ Uploaded {len(extracted)} lines to {gcs_uri}")
+
+    bucket_name = gcs_bucket or os.getenv("GCS_BUCKET_RAW")
+    if bucket_name:
+        blob_path = f"referentials/{filename}"
+        storage.Client().bucket(bucket_name).blob(blob_path).upload_from_string(
+            ndjson, content_type="application/json"
+        )
+        logger.info(
+            f"✅ Uploaded {len(extracted)} lines to gs://{bucket_name}/{blob_path}"
+        )
+    else:
+        local_dir = (
+            Path(output_dir)
+            if output_dir
+            else PROJECT_ROOT / "data/bronze/referentials"
+        )
+        local_dir.mkdir(parents=True, exist_ok=True)
+        filepath = local_dir / filename
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(ndjson)
+        logger.info(f"✅ Saved {len(extracted)} lines to {filepath}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Extract IDFM lines referential")
     parser.add_argument(
-        "--bucket",
-        default=None,
-        help="GCS bucket name (default: GCS_BUCKET_RAW env var)",
+        "--bucket", default=None, help="GCS bucket (default: GCS_BUCKET_RAW env var)"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Local output dir (fallback when no GCS)"
     )
     args = parser.parse_args()
-    extract_ref_lines(args.bucket)
+    extract_ref_lines(gcs_bucket=args.bucket, output_dir=args.output)
 
 
 if __name__ == "__main__":
