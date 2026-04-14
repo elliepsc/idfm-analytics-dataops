@@ -25,6 +25,7 @@ from utils.monitoring import (  # noqa: E402
     check_statistical_anomaly,
     check_validation_count_threshold,
     log_dag_metric,
+    send_anomaly_alert,
     sla_miss_callback,
 )
 
@@ -83,12 +84,7 @@ def run_statistical_anomaly_check(**context):
 
     Compares today's total validations against the 7-day rolling baseline.
     Logs z_score + is_anomaly to BigQuery dag_metrics.
-    Sends enriched Slack alert if anomaly detected.
-
-    Why z-score:
-    - Adapts to weekday/weekend patterns automatically
-    - No manual threshold tuning needed
-    - Detects both drops (pipeline failure) and spikes (data duplication)
+    Sends enriched Slack alert if anomaly detected (via utils.monitoring).
     """
     execution_date = context["ds"]
     dag_run = context["dag_run"]
@@ -100,7 +96,6 @@ def run_statistical_anomaly_check(**context):
         z_score_threshold=Z_SCORE_THRESHOLD,
     )
 
-    # Log to BigQuery dag_metrics with z_score + is_anomaly fields
     log_dag_metric(
         project_id=PROJECT_ID,
         dataset=DATASET_RAW,
@@ -114,37 +109,9 @@ def run_statistical_anomaly_check(**context):
         is_anomaly=anomaly["is_anomaly"],
     )
 
-    # Send enriched Slack alert if anomaly detected
     if anomaly["is_anomaly"]:
-        direction_emoji = "📉" if anomaly["direction"] == "low" else "📈"
-        direction_label = (
-            "anormalement basse"
-            if anomaly["direction"] == "low"
-            else "anormalement haute"
-        )
-
-        message = (
-            f"{direction_emoji} *Anomalie statistique détectée* — {execution_date}\n"
-            f"• Validations aujourd'hui : *{anomaly['today_count']:,}*\n"
-            f"• Moyenne 7 jours : {anomaly['mean_7d']:,.0f}\n"
-            f"• Écart-type 7 jours : {anomaly['std_7d']:,.0f}\n"
-            f"• Z-score : *{anomaly['z_score']}* (seuil : ±{Z_SCORE_THRESHOLD})\n"
-            f"• Valeur {direction_label}\n"
-            f"_Vérifier le DAG transport_daily_pipeline_"
-        )
-
-        try:
-            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-            SlackWebhookHook(slack_webhook_conn_id=SLACK_WEBHOOK_CONN_ID).send(
-                text=message
-            )
-            logger.warning("Anomaly Slack alert sent for %s", execution_date)
-        except Exception as e:
-            logger.warning("Slack anomaly alert skipped: %s", e)
-
+        send_anomaly_alert(anomaly, execution_date, Z_SCORE_THRESHOLD)
         # Don't raise — anomaly is logged and alerted, but doesn't fail the DAG
-        # Change to raise ValueError(...) if you want the task to fail on anomaly
         logger.warning(
             "Anomaly detected but task continues (z=%.2f). "
             "Set raise on anomaly if you want task failure.",

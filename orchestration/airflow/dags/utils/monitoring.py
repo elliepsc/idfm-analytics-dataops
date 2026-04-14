@@ -301,6 +301,45 @@ def check_statistical_anomaly(
 
 
 # ═════════════════════════════════════════════════════════════════
+# Anomaly Alert — Slack notification
+# ═════════════════════════════════════════════════════════════════
+
+
+def send_anomaly_alert(
+    anomaly: dict,
+    execution_date: str,
+    z_score_threshold: float,
+    slack_conn_id: str = SLACK_WEBHOOK_CONN_ID,
+) -> None:
+    """
+    Send a Slack alert when a statistical anomaly is detected.
+
+    Called by monitoring_dag.run_statistical_anomaly_check when is_anomaly=True.
+    Silently skipped if the Slack connection is not configured.
+    """
+    direction_emoji = "📉" if anomaly["direction"] == "low" else "📈"
+    direction_label = (
+        "anormalement basse" if anomaly["direction"] == "low" else "anormalement haute"
+    )
+    message = (
+        f"{direction_emoji} *Anomalie statistique détectée* — {execution_date}\n"
+        f"• Validations aujourd'hui : *{anomaly['today_count']:,}*\n"
+        f"• Moyenne 7 jours : {anomaly['mean_7d']:,.0f}\n"
+        f"• Écart-type 7 jours : {anomaly['std_7d']:,.0f}\n"
+        f"• Z-score : *{anomaly['z_score']}* (seuil : ±{z_score_threshold})\n"
+        f"• Valeur {direction_label}\n"
+        f"_Vérifier le DAG transport_daily_pipeline_"
+    )
+    try:
+        from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+
+        SlackWebhookHook(slack_webhook_conn_id=slack_conn_id).send(text=message)
+        logger.warning("Anomaly Slack alert sent for %s", execution_date)
+    except Exception as e:
+        logger.warning("Slack anomaly alert skipped: %s", e)
+
+
+# ═════════════════════════════════════════════════════════════════
 # SLA Miss Callback
 # ═════════════════════════════════════════════════════════════════
 

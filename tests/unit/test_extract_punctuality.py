@@ -141,6 +141,45 @@ class TestExtractPunctuality:
 
         assert "+00:00" in data[0]["ingestion_ts"] or "Z" in data[0]["ingestion_ts"]
 
+    @patch("extract_ponctuality.storage.Client")
+    @patch("extract_ponctuality.load_config")
+    @patch("extract_ponctuality.ODSv2Client")
+    def test_extract_punctuality_gcs(
+        self,
+        mock_client_class,
+        mock_load_config,
+        mock_storage,
+        mock_config,
+        mock_ods_response_punctuality,
+    ):
+        """GCS path: records uploaded as NDJSON to the correct bucket/blob."""
+        mock_load_config.return_value = mock_config
+        mock_client = MagicMock()
+        mock_client.get_all_records.return_value = mock_ods_response_punctuality[
+            "results"
+        ]
+        mock_client_class.return_value = mock_client
+
+        mock_blob = MagicMock()
+        mock_storage.return_value.bucket.return_value.blob.return_value = mock_blob
+
+        extract_punctuality(
+            start_date="2024-01-01",
+            end_date="2024-01-31",
+            gcs_bucket="test-bucket",
+        )
+
+        mock_storage.return_value.bucket.assert_called_once_with("test-bucket")
+        mock_storage.return_value.bucket.return_value.blob.assert_called_once_with(
+            "punctuality/punctuality_2024-01_2024-01.json"
+        )
+        mock_blob.upload_from_string.assert_called_once()
+        call_args = mock_blob.upload_from_string.call_args
+        assert call_args[1]["content_type"] == "application/json"
+        payload = call_args[0][0]
+        lines = payload.strip().split("\n")
+        assert len(lines) == 2
+
     def test_load_config_is_callable(self):
         """load_config is a callable function."""
         assert callable(load_config)
