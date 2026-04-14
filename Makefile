@@ -106,6 +106,8 @@ install-terraform:  ## Install Terraform
 	sudo snap install terraform --classic  # Requires sudo and snapd
 
 # Ingestion
+# If GCS_BUCKET_RAW is set in .env → streams NDJSON to GCS (prod behaviour)
+# If not set → writes JSON locally to data/bronze/ (local dev / no-GCP reproduction)
 ingest: ingest-validations ingest-punctuality ingest-refs  ## Full ingestion
 
 ingest-validations:  ## Ingest validations (START_DATE to END_DATE)
