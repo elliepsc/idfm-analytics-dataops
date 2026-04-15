@@ -152,9 +152,12 @@ models:
 
       **Grain**: 1 unique stop (stop_id)
 
-      **Source**: IDFM stop referential
+      **Source**: IDFM stop referential (arrets-lignes export)
 
       **Refresh**: Daily (TRUNCATE + reload)
+
+      **Note on transport_mode/operator**: source is 1 stop × N lines; deduplication
+      keeps the most recently ingested row. Best-effort primary assignment for multimodal stops.
 
       **Usage**: Join with fct_validations_daily
     columns:
@@ -181,6 +184,17 @@ models:
           - dbt_utils.accepted_range:
               min_value: 1.5
               max_value: 3.5
+      - name: transport_mode
+        description: "Primary transport mode (best-effort for multimodal interchange stops)"
+        data_tests:
+          - accepted_values:
+              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR']
+              config:
+                severity: warn
+      - name: operator
+        description: "Primary operator (RATP, SNCF, etc.)"
+      - name: insee_code
+        description: "INSEE municipality code for the stop location"
 
   - name: dim_line
     description: |
@@ -676,6 +690,203 @@ models:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
+              inclusive: true
+
+  - name: mart_line_demand_vs_punctuality
+    description: |
+      **Monthly demand vs punctuality cross by line — METRO + RER (v4)**
+
+      **Grain**: 1 line x 1 month
+
+      **Demand source**: `mart_validations_line_daily` (trusted METRO + RER)
+
+      **Punctuality source**: `fct_punctuality_monthly` (RER + TRAIN)
+
+      **Note**: METRO lines appear with `demand_punctuality_profile = 'no_punctuality_data'`.
+      This is intentional — no metro punctuality source is available.
+    columns:
+      - name: validation_month
+        description: "Reference month"
+        data_tests:
+          - not_null
+      - name: line_id
+        description: "Line identifier (FK to dim_line)"
+        data_tests:
+          - not_null
+      - name: line_validations
+        description: "Total trusted validations for the line this month"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: demand_punctuality_profile
+        description: "Interpretive profile combining demand tercile and punctuality"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['no_punctuality_data', 'resilient_under_pressure', 'fragile_under_pressure',
+                       'structurally_fragile', 'stable_low_demand', 'moderate']
+
+  - name: mart_validations_line_daily
+    description: |
+      **Daily validations at line level — METRO + RER (v1)**
+
+      **Grain**: 1 line x 1 day
+
+      **Source**: `fct_validations_line_daily` (trusted_only, high-confidence stop→line mappings)
+
+      **Scope**: `transport_mode IN ('METRO', 'RER')` — trusted mappings only.
+
+      **Aggregation**: Sums across ticket_type. Use `fct_validations_line_daily` for ticket-level breakdown.
+
+      **Key fields**:
+      - `validation_count`: total trusted validations for the line on that day
+      - `mapped_stop_count`: distinct stops that contributed trusted validations
+    columns:
+      - name: mart_line_daily_key
+        description: "Surrogate key on validation_date + line_id"
+        data_tests:
+          - not_null
+          - unique
+      - name: validation_date
+        description: "Validation date"
+        data_tests:
+          - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
+      - name: line_id
+        description: "FK to dim_line"
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_line')
+              field: line_id
+              config:
+                severity: warn
+      - name: transport_mode
+        description: "Transport mode — METRO or RER only in this mart"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['METRO', 'RER']
+      - name: validation_count
+        description: "Total trusted validations for this line on this day (all ticket types)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: mapped_stop_count
+        description: "Distinct stops with trusted mappings that contributed to this line's count"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
+
+  - name: mart_validations_line_monthly
+    description: |
+      **Monthly validations at line level — METRO + RER (v1)**
+
+      **Grain**: 1 line x 1 month
+
+      **Source**: `mart_validations_line_daily` (trusted mappings only)
+
+      **Aggregation**: Sums across ticket_type and day. Use mart_validations_line_daily for daily breakdown.
+    columns:
+      - name: mart_line_monthly_key
+        description: "Surrogate key on validation_month + line_id"
+        data_tests:
+          - not_null
+          - unique
+      - name: validation_month
+        description: "Reference month (DATE_TRUNC MONTH)"
+        data_tests:
+          - not_null
+      - name: line_id
+        description: "FK to dim_line"
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_line')
+              field: line_id
+              config:
+                severity: warn
+      - name: transport_mode
+        description: "Transport mode — METRO or RER only"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['METRO', 'RER']
+      - name: validation_count
+        description: "Total trusted validations for the line this month (all ticket types)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: days_with_data
+        description: "Number of distinct days with validation data this month"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 31
+              inclusive: true
+
+  # ─────────────────────────────────────────────────────────────
+  # MARTS - MONITORING (continued)
+  # ─────────────────────────────────────────────────────────────
+  - name: mart_bridge_coverage_daily
+    description: |
+      **Daily coverage KPIs for the validation stop→line bridge**
+
+      **Grain**: 1 day
+
+      **Purpose**: Audits the stop→line mapping quality to prevent silent overstatement
+      of metro line precision. Key KPIs: % mapped, % trusted, % unmapped.
+
+      **Deduplication note**: multi-line stops appear N times in int_validation_stop_line
+      with the same validation_count. This mart deduplicates at stop×date×ticket_type
+      before summing to avoid double-counting.
+    columns:
+      - name: validation_date
+        description: "Validation date"
+        data_tests:
+          - not_null
+          - unique
+      - name: total_validation_count
+        description: "Total validation count (deduplicated)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: pct_mapped
+        description: "% validations with at least one candidate line mapping"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: pct_trusted
+        description: "% validations with a high-confidence (trusted) mapping"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: ">= 30"
+              config:
+                severity: warn
+      - name: pct_unmapped
+        description: "% validations with no candidate line mapping"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
               inclusive: true
 
 macros:
