@@ -65,6 +65,9 @@ htmlcov/
 # Logs
 *.log
 
+# Test coverage reports
+coverage.xml
+
 # Jupyter Notebook
 .ipynb_checkpoints/
 *.ipynb
