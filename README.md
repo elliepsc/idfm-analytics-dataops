@@ -1,4 +1,4 @@
-# 🚇 IDFM Analytics DataOps
+# IDFM Analytics DataOps
 
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
 [![dbt](https://img.shields.io/badge/dbt-1.8.7-orange)](https://getdbt.com)
@@ -9,14 +9,21 @@
 [![CI](https://github.com/elliepsc/idfm-analytics-dataops/actions/workflows/lint-and-test.yml/badge.svg)](https://github.com/elliepsc/idfm-analytics-dataops/actions)
 [![dbt docs](https://img.shields.io/badge/dbt_docs-GitHub_Pages-orange)](https://elliepsc.github.io/idfm-analytics-dataops)
 
-> **Production-grade batch analytics pipeline for Paris public transport (IDFM network)**
-> API Ingestion → BigQuery (Medallion) → dbt → Airflow (4 DAGs) → Data Quality → Dashboard
+**Production-grade batch analytics platform for Paris public transport (IDFM network).**
+Heterogeneous open APIs → BigQuery Medallion warehouse → dbt → Airflow → Data Quality → Dashboard.
+
+| | |
+|---|---|
+| **4.1M+ rows** in BigQuery, with daily growth | **5 Airflow DAGs** — ingestion, transformation, backfill, monitoring |
+| **310 dbt tests** + Great Expectations + CI | **2-year historical backfill** (2023–2025, ~2.3M rows initial load) |
+| **5 prod datasets** provisioned with Terraform | **SLA monitoring** tracked in `fct_data_health_daily` |
 
 ---
 
 ## Table of Contents
 
 - [Problem Statement](#-problem-statement)
+- [Why This Is Technically Hard](#-why-this-is-technically-hard)
 - [Overview](#-overview)
 - [Tech Stack](#-tech-stack)
 - [Architecture](#-architecture)
@@ -34,7 +41,7 @@
 
 ---
 
-## 🎯 Problem Statement
+## Problem Statement
 
 Île-de-France Mobilités (IDFM) operates the densest public transport network in Europe: **~10 million trips per day**, 300+ lines, 5,000+ stops. IDFM publishes open data via REST APIs — ticket validations, train punctuality, stop and line reference data.
 
@@ -45,11 +52,27 @@ These datasets are scattered across heterogeneous APIs, with no consolidation or
 - Which stations concentrate the most passenger validations?
 - Are the data pipelines fresh and meeting SLA targets?
 
-This project builds a **production-grade analytics pipeline** that automatically ingests, transforms, and serves these datasets to answer exactly those questions.
+This project builds a **production-grade analytics platform** that automatically ingests, transforms, and serves these datasets to answer exactly those questions.
 
 ---
 
-## 📌 Overview
+## Why This Is Technically Hard
+
+Building on top of IDFM open data is not just an ETL exercise. Several non-obvious constraints shaped this project's architecture:
+
+**Mismatched identifiers across APIs.** The validations API uses `stop_id` (IDFM stop codes). The punctuality API uses `station_id_zdc` (a distinct Transilien code). Joining them requires a non-trivial cross-reference derived from reference data — there is no shared primary key. A naive join silently drops rows; this project resolves the mapping explicitly in the staging layer.
+
+**Data is not real-time — and that's fine.** IDFM validation data is published with a 24-hour delay. Punctuality data is aggregated monthly at source. Streaming would add operational cost and complexity without adding business value. The pipeline runs daily at 2 AM when the previous day's data is reliably available, and is fully idempotent (`WRITE_TRUNCATE` + incremental `MERGE`).
+
+**No historical data available from the APIs.** IDFM APIs only expose recent data. To build meaningful trend analysis, a manifest-driven backfill module was written to load 2023–2025 records, resulting in 2.3M rows loaded on initialization. Without this, the dashboard would have had nothing to show at launch.
+
+**Reference data drifts.** Stops and lines change over time. The pipeline performs a full refresh of referential tables on each run and handles surrogate key conflicts in the dimension models to avoid stale lookups in fact tables.
+
+**Data quality is not guaranteed upstream.** Records with null stop codes, out-of-range validation counts, or duplicate punctuality entries arrive regularly. 95 dbt tests and a Great Expectations suite running in CI catch these regressions before they reach the Gold layer.
+
+---
+
+## Overview
 
 This is a complete end-to-end data engineering project that:
 
@@ -61,11 +84,11 @@ This is a complete end-to-end data engineering project that:
 6. **Provisions** all infrastructure with Terraform (IaC) — 5 prod datasets + 4 dev datasets
 7. **Exposes** KPIs in a Looker Studio dashboard
 
-Additionally, a manifest-driven **historical backfill** loaded 2023–2025 data (~2.3M rows) into BigQuery. Combined with daily pipeline ingestion, the fact table now holds 4.1M+ rows with ongoing daily growth.
+A manifest-driven **historical backfill** loaded 2023–2025 data (~2.3M rows) into BigQuery. Combined with daily pipeline ingestion, the fact table now holds **4.1M+ rows** with ongoing daily growth.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technology | Role |
 |-----------|-----------|------|
