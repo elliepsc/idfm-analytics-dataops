@@ -1,5 +1,6 @@
 .PHONY: help setup install test lint clean ingest load-raw dbt-build check-sla
-.PHONY: airflow-start airflow-stop airflow-logs airflow-ui airflow-trigger-daily airflow-backfill reviewer
+.PHONY: airflow-start airflow-stop airflow-logs airflow-ui airflow-trigger-daily airflow-trigger-quarterly airflow-backfill reviewer
+.PHONY: ingest-incidents ingest-service-quality ingest-hourly-profiles
 .PHONY: ci-install python-quality-local data-quality-local data-quality-prod-local dbt-parse-local terraform-validate-local ci-local
 
 # Variables
@@ -42,6 +43,9 @@ airflow-ui:  ## Open Airflow UI
 
 airflow-trigger-daily:  ## Manually trigger the daily DAG
 	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler airflow dags trigger transport_daily_pipeline
+
+airflow-trigger-quarterly:  ## Manually trigger the quarterly DAG (X1 service quality + X5 hourly profiles)
+	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler airflow dags trigger transport_quarterly_pipeline
 
 airflow-backfill:  ## Backfill (START_DATE and END_DATE required)
 	$(AIRFLOW_COMPOSE) exec -T airflow-scheduler airflow dags trigger transport_backfill \
@@ -108,7 +112,7 @@ install-terraform:  ## Install Terraform
 # Ingestion
 # If GCS_BUCKET_RAW is set in .env → streams NDJSON to GCS (prod behaviour)
 # If not set → writes JSON locally to data/bronze/ (local dev / no-GCP reproduction)
-ingest: ingest-validations ingest-punctuality ingest-refs  ## Full ingestion
+ingest: ingest-validations ingest-punctuality ingest-refs ingest-incidents  ## Full daily ingestion (validations + punctuality + refs + incidents)
 
 ingest-validations:  ## Ingest validations (START_DATE to END_DATE)
 	$(PYTHON) ingestion/extract_validations.py --start $(START_DATE) --end $(END_DATE)
@@ -120,6 +124,17 @@ ingest-refs:  ## Ingest referentials (stops, lines, mappings)
 	$(PYTHON) ingestion/extract_ref_stops.py
 	$(PYTHON) ingestion/extract_ref_lines.py
 	$(PYTHON) ingestion/extract_ref_stop_lines.py
+
+ingest-incidents:  ## Ingest today's incident messages (X2 — use START_DATE/END_DATE for range)
+	$(PYTHON) ingestion/extract_incidents_daily.py --start-date $(START_DATE) --end-date $(END_DATE)
+
+ingest-service-quality:  ## Ingest quarterly service quality indicators (X1 — run once per quarter)
+	$(PYTHON) ingestion/extract_service_quality.py
+
+ingest-hourly-profiles:  ## Ingest quarterly hourly validation profiles (X5 — run once per quarter)
+	$(PYTHON) ingestion/extract_hourly_profiles.py
+
+ingest-quarterly: ingest-service-quality ingest-hourly-profiles  ## Full quarterly ingestion (X1 + X5)
 
 load-raw:  ## Load data into BigQuery RAW
 	$(PYTHON) ingestion/load_bigquery_raw.py

@@ -8,16 +8,25 @@ GCS layout (when GCS_BUCKET_RAW is set):
   gs://{GCS_BUCKET_RAW}/validations/validations_*.json
   gs://{GCS_BUCKET_RAW}/punctuality/punctuality_*.json
   gs://{GCS_BUCKET_RAW}/referentials/ref_*.json
+  gs://{GCS_BUCKET_RAW}/incidents/incidents_*.json          ← X2 daily
+  gs://{GCS_BUCKET_RAW}/service_quality/service_quality_*.json  ← X1 quarterly
+  gs://{GCS_BUCKET_RAW}/hourly_profiles/hourly_profiles_*.json  ← X5 quarterly
 
 Local layout (fallback for reproduction without GCP storage):
   data/bronze/validations/validations_*.json
   data/bronze/punctuality/punctuality_*.json
   data/bronze/referentials/ref_*.json
+  data/bronze/incidents/incidents_*.json
+  data/bronze/service_quality/service_quality_*.json
+  data/bronze/hourly_profiles/hourly_profiles_*.json
 
 Usage:
-    python ingestion/load_bigquery_raw.py              # Load all (GCS if set, else local)
+    python ingestion/load_bigquery_raw.py              # Load all daily (GCS if set, else local)
     python ingestion/load_bigquery_raw.py --local-dir data/bronze  # Force local
     python ingestion/load_bigquery_raw.py --validations
+    python ingestion/load_bigquery_raw.py --incidents   # X2: daily incidents only
+    python ingestion/load_bigquery_raw.py --service-quality   # X1: quarterly snapshot
+    python ingestion/load_bigquery_raw.py --hourly-profiles   # X5: quarterly snapshot
 """
 
 import argparse
@@ -27,6 +36,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery, storage
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -84,6 +94,15 @@ class BigQueryLoader:
             autodetect=(schema is None),
             schema=schema,
         )
+
+    def _ensure_table_exists(self, table_name: str, schema: list[bigquery.SchemaField]):
+        """Create an empty RAW table when a loader has nothing to append."""
+        table_id = f"{self.project_id}.{self.dataset_raw}.{table_name}"
+        try:
+            self.bq_client.get_table(table_id)
+        except NotFound:
+            self.bq_client.create_table(bigquery.Table(table_id, schema=schema))
+            logger.info(f"Created empty table {table_id}")
 
     def load_from_gcs(
         self,
@@ -206,13 +225,106 @@ class BigQueryLoader:
                     latest, table_name, write_disposition="WRITE_TRUNCATE"
                 )
 
+    def load_incidents(self, truncate: bool = False):
+        """Load incident NDJSON files (WRITE_APPEND - daily new messages).
+
+        X2 reliability layer. Each daily extraction appends new messages.
+        Use --truncate only for a full historical reload.
+        """
+        incident_schema = [
+            bigquery.SchemaField("incident_date", "STRING"),
+            bigquery.SchemaField("incident_end_date", "STRING"),
+            bigquery.SchemaField("line_id", "STRING"),
+            bigquery.SchemaField("line_name", "STRING"),
+            bigquery.SchemaField("incident_type", "STRING"),
+            bigquery.SchemaField("incident_type_raw", "STRING"),
+            bigquery.SchemaField("cause", "STRING"),
+            bigquery.SchemaField("affected_stops", "STRING"),
+            bigquery.SchemaField("transport_mode", "STRING"),
+            bigquery.SchemaField("affected_stop_count", "INT64"),
+            bigquery.SchemaField("ingestion_ts", "TIMESTAMP"),
+            bigquery.SchemaField("source", "STRING"),
+        ]
+        self._ensure_table_exists("raw_incidents_daily", incident_schema)
+        if self.local_dir:
+            sources = self._list_local_files("incidents", "incidents_*.json")
+        else:
+            sources = self._list_gcs_uris("incidents/")
+        if not sources:
+            logger.warning("No incident files found — skipping (X2 not yet extracted)")
+            return
+        logger.info(f"Found {len(sources)} incident file(s)")
+        self._load_files(sources, "raw_incidents_daily", truncate=truncate)
+
+    def load_service_quality(self):
+        """Load service quality snapshot (WRITE_TRUNCATE — full quarterly snapshot).
+
+        X1 reliability layer. Always replaces the table with the latest file.
+        Published quarterly by IDFM — run once per quarter after extract_service_quality.py.
+        """
+        if self.local_dir:
+            sources = self._list_local_files(
+                "service_quality", "service_quality_*.json"
+            )
+        else:
+            sources = self._list_gcs_uris("service_quality/")
+        if not sources:
+            logger.warning(
+                "No service quality files found — skipping (X1 not yet extracted)"
+            )
+            return
+        latest = sources[-1]
+        logger.info(f"Using latest service quality file: {latest}")
+        if isinstance(latest, Path):
+            self.load_from_local(
+                latest, "raw_service_quality", write_disposition="WRITE_TRUNCATE"
+            )
+        else:
+            self.load_from_gcs(
+                latest, "raw_service_quality", write_disposition="WRITE_TRUNCATE"
+            )
+
+    def load_hourly_profiles(self):
+        """Load hourly validation profiles snapshot (WRITE_TRUNCATE — quarterly edition).
+
+        X5 reliability layer. Always replaces the table with the latest quarterly file.
+        Published quarterly by IDFM — run once per quarter after extract_hourly_profiles.py.
+        """
+        if self.local_dir:
+            sources = self._list_local_files(
+                "hourly_profiles", "hourly_profiles_*.json"
+            )
+        else:
+            sources = self._list_gcs_uris("hourly_profiles/")
+        if not sources:
+            logger.warning(
+                "No hourly profile files found — skipping (X5 not yet extracted)"
+            )
+            return
+        latest = sources[-1]
+        logger.info(f"Using latest hourly profiles file: {latest}")
+        if isinstance(latest, Path):
+            self.load_from_local(
+                latest, "raw_hourly_profiles", write_disposition="WRITE_TRUNCATE"
+            )
+        else:
+            self.load_from_gcs(
+                latest, "raw_hourly_profiles", write_disposition="WRITE_TRUNCATE"
+            )
+
     def load_all(self, truncate: bool = False):
-        """Load all datasets: validations, punctuality, referentials."""
-        logger.info("Starting full data load to BigQuery RAW")
+        """Load daily datasets: validations, punctuality, referentials, incidents.
+
+        NOTE: service_quality and hourly_profiles are quarterly — they are NOT
+        included here. Run load_service_quality() and load_hourly_profiles()
+        separately from the quarterly DAG (transport_quarterly_pipeline).
+        """
+        logger.info("Starting full daily data load to BigQuery RAW")
         self.load_validations(truncate=truncate)
         self.load_punctuality(truncate=truncate)
         self.load_referentials()
-        logger.info("✅ Full data load complete")
+        self.load_incidents(truncate=truncate)
+        logger.info("✅ Full daily data load complete")
 
 
 def main():
@@ -227,6 +339,19 @@ def main():
     )
     parser.add_argument(
         "--referentials", action="store_true", help="Load referentials only"
+    )
+    parser.add_argument(
+        "--incidents", action="store_true", help="Load incidents only (X2, daily)"
+    )
+    parser.add_argument(
+        "--service-quality",
+        action="store_true",
+        help="Load service quality only (X1, quarterly WRITE_TRUNCATE)",
+    )
+    parser.add_argument(
+        "--hourly-profiles",
+        action="store_true",
+        help="Load hourly profiles only (X5, quarterly WRITE_TRUNCATE)",
     )
     parser.add_argument(
         "--truncate", action="store_true", help="Reset tables before loading"
@@ -246,6 +371,12 @@ def main():
         loader.load_punctuality(truncate=args.truncate)
     elif args.referentials:
         loader.load_referentials()
+    elif args.incidents:
+        loader.load_incidents(truncate=args.truncate)
+    elif args.service_quality:
+        loader.load_service_quality()
+    elif args.hourly_profiles:
+        loader.load_hourly_profiles()
     else:
         loader.load_all(truncate=args.truncate)
 

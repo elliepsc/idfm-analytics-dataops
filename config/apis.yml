@@ -70,6 +70,84 @@ idfm:
         - trips.txt      # trip_id → route_id (= line_id)
         - stop_times.txt # stop_id × trip_id → derive stop_id × line_id
 
+    # -------------------------------------------------------------------------
+    # SERVICE QUALITY INDICATORS (quarterly)
+    # Source: "Indicateurs de qualité de service du parcours voyageur"
+    # Grain: 1 line × 1 quarter × 1 indicator
+    # Fields at root level (ODS v2). Quarter format: "2025 T1".
+    # Covers RATP Métro + RER + SNCF Transilien — complements punctuality KPI.
+    # ⚠️  Verified dataset ID via ODS catalog on 2026-04-15.
+    # -------------------------------------------------------------------------
+    service_quality:
+      id: "indicateurs-qualite-service-parcours-voyageur"
+      fields:
+        trimestre:         "trimestre"                   # Quarter part: T1/T2/T3/T4
+        annee:             "annee"                       # Year as string e.g. "2022"
+        line_name:         "ligne"                       # e.g. "Ligne A"
+        line_id:           "id_line"                     # IDFM line_id (e.g. "C01742")
+        indicator_label:   "indicateur"                  # Full indicator name
+        indicator_theme:   "thematique"                  # Theme category
+        indicator_value:   "resultat_indicateurs_en"     # Float text (%)
+        target_value:      "objectif_reference_contrat"  # Float text (%)
+        transport_mode:    "mode"                        # e.g. "METRO", "RER"
+        operator:          "operateur"                   # e.g. "RATP", "SNCF"
+    # -------------------------------------------------------------------------
+    # DISRUPTION / INCIDENTS (daily snapshot)
+    # ⚠️  NO ODS DATASET AVAILABLE — source is the PRIM API (disruptions_bulk).
+    # ODS catalog search on 2026-04-15 found no matching incident dataset.
+    # The PRIM API (prim.iledefrance-mobilites.fr) provides SIRI/GTFS-RT data
+    # but requires a separate PRIM API key (env var: PRIM_API_KEY).
+    #
+    # Current status: extractor returns empty gracefully (no crash).
+    # X2 is blocked until PRIM API access is set up.
+    # Fallback: use "cartes-des-travaux" (ODS) for planned works only — no unplanned.
+    # -------------------------------------------------------------------------
+    incidents:
+      id: "cartes-des-travaux"                 # Fallback ODS: planned works only
+      prim:
+        api_url: null                          # Prefer env var PRIM_API_URL for the exact disruptions_bulk endpoint
+        records_path: "disruptions"            # Expected payload path from the PRIM bulk API
+        api_key_location: "query"              # Supported: query | header | bearer
+        api_key_name: "apikey"
+        start_date_param: null                 # Fill if the endpoint supports date-window filtering
+        end_date_param: null
+        default_params: {}
+      fields:
+        incident_date:     "date_debut"         # Start date (YYYY-MM-DD)
+        incident_end_date: "date_fin"           # End date (YYYY-MM-DD or NULL)
+        line_id:           "id_ligne"           # Affected line (IDFM format)
+        line_name:         "ligne"              # e.g. "RER A"
+        incident_type:     "type_perturbation"  # e.g. "TRAVAUX", "INCIDENT"
+        cause:             "cause"              # Human cause description
+        affected_stops:    "arrets_concernes"   # Comma-sep list of stop names
+        transport_mode:    "mode"               # e.g. "RER", "METRO"
+      filters:
+        date_field: "date_debut"
+    # -------------------------------------------------------------------------
+    # HOURLY VALIDATION PROFILES — ferré (quarterly snapshot)
+    # Source: "Validations sur le réseau ferré : Profils horaires par jour type"
+    # Grain: 1 stop × 1 hour × 1 day_type (JOHV / SAM / DIM)
+    # Extractor: ingestion/extract_hourly_profiles.py
+    # ⚠️  Dataset ID changes every quarter — update `id` when a new edition is published.
+    # Pattern: validations-sur-le-reseau-ferre-profils-horaires-par-jour-type-{N}eme-trimestre-{YYYY}
+    # Latest verified (2026-04-15): 2ème trimestre 2025.
+    # Check: https://data.iledefrance-mobilites.fr/explore/?q=profils+horaires+ferr%C3%A9
+    # Use: enriches mart_validations_line_daily with intra-day demand distribution.
+    # -------------------------------------------------------------------------
+    hourly_profiles:
+      id: "validations-sur-le-reseau-ferre-profils-horaires-par-jour-type-2eme-trimestre-2025"
+      quarter: "T2 2025"  # Edition label — update each quarter when dataset ID is updated
+      fields:
+        stop_id:           "code_stif_arret"         # STIF numeric stop code (text)
+        stop_name:         "libelle_arret"            # Human-readable name
+        line_code_trns:    "code_stif_trns"           # Operator code (100=RATP, 800=SNCF)
+        line_code_res:     "code_stif_res"            # Network code
+        hour_label:        "trnc_horr_60"             # Hour range text e.g. "05H-06H"
+        day_type:          "cat_jour"                 # JOHV/SAHV/JOVS/SAVS/DIJFP
+        validation_share:  "pourcentage_validations"  # % of daily validations in this hour/day_type
+      filters:
+        date_field: null  # Full-snapshot dataset — no date filter
+
 transilien:
   base_url: "https://ressources.data.sncf.com/api/explore/v2.1"
   datasets:

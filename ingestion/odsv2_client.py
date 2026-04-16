@@ -33,6 +33,7 @@ class ODSv2Client:
         self,
         base_url: str,
         dataset_id: str,
+        api_key: str = None,
         timeout: int = 30,
         max_retries: int = 3,
         rate_limit_delay: float = 0.5,
@@ -49,6 +50,7 @@ class ODSv2Client:
         """
         self.base_url = base_url.rstrip("/")
         self.dataset_id = dataset_id
+        self.api_key = api_key
         self.timeout = timeout
         self.rate_limit_delay = rate_limit_delay
 
@@ -106,6 +108,8 @@ class ODSv2Client:
             "limit": min(limit, 100),
             "offset": offset,
         }  # API enforces max 100
+        if self.api_key:
+            params["apikey"] = self.api_key
 
         if where:
             params["where"] = where
