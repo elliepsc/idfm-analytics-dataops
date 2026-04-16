@@ -123,8 +123,40 @@ def extract_referentials(**context):
         )
 
 
+def extract_incidents(**context):
+    """Extract today's incident/disruption messages from IDFM (X2 reliability layer).
+
+    Non-blocking: logs a warning and succeeds if the source is unavailable.
+    The PRIM API (disruptions_bulk) is not yet configured — ODS fallback may 404.
+    """
+    import logging
+    import sys
+
+    sys.path.insert(0, INGESTION_DIR)
+    from extract_incidents_daily import extract_incidents_daily
+
+    execution_date = context["ds"]  # Format: YYYY-MM-DD
+    try:
+        extract_incidents_daily(
+            start_date=execution_date,
+            end_date=execution_date,
+            gcs_bucket=GCS_BUCKET_RAW,
+        )
+        print(f"✅ Incidents extracted for {execution_date}")
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"⚠️ Incidents extraction failed (non-blocking): {e}. "
+            "X2 requires PRIM API access. Skipping."
+        )
+
+
 def load_to_bigquery(**context):
-    """Load JSON files to BigQuery RAW tables"""
+    """Load JSON files to BigQuery RAW tables.
+
+    Includes incidents (X2) via load_all().
+    Service quality (X1) and hourly profiles (X5) are quarterly —
+    handled by transport_quarterly_pipeline DAG.
+    """
     import sys
 
     sys.path.insert(0, INGESTION_DIR)
@@ -133,7 +165,7 @@ def load_to_bigquery(**context):
     loader = BigQueryLoader()
     loader.load_all()
 
-    print("✅ All data loaded to BigQuery RAW tables")
+    print("✅ All daily data loaded to BigQuery RAW tables")
 
 
 def check_sla(**context):
@@ -199,6 +231,15 @@ with DAG(
     extract_referentials_task = PythonOperator(
         task_id="extract_referentials",
         python_callable=extract_referentials,
+        provide_context=True,
+    )
+
+    # X2 reliability layer — daily incident messages from IDFM Info Trafic
+    # Non-blocking: the callable catches all exceptions internally and logs a
+    # warning instead of raising. Remove the try/except once PRIM API is set up.
+    extract_incidents_task = PythonOperator(
+        task_id="extract_incidents",
+        python_callable=extract_incidents,
         provide_context=True,
     )
 
@@ -294,6 +335,7 @@ with DAG(
         extract_validations_task,
         extract_punctuality_task,
         extract_referentials_task,
+        extract_incidents_task,  # X2 reliability layer
     ] >> load_bigquery_task
 
     # Sequential: Load → dbt deps → dbt build → Verify rows → SLA check → Notify
