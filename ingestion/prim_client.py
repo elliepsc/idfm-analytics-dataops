@@ -23,7 +23,7 @@ class PRIMClient:
         self,
         url: str,
         api_key: str,
-        api_key_location: str = "query",
+        api_key_location: str = "header",  # PRIM marketplace uses header auth
         api_key_name: str = "apikey",
         timeout: int = 30,
         max_retries: int = 3,
