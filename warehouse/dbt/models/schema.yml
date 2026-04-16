@@ -889,6 +889,392 @@ models:
               max_value: 100
               inclusive: true
 
+  # ─────────────────────────────────────────────────────────────
+  # X1 — CORE FACT: SERVICE QUALITY QUARTERLY
+  # ─────────────────────────────────────────────────────────────
+  - name: fct_service_quality_quarterly
+    description: |
+      **Quarterly service quality indicators fact table**
+
+      **Grain**: 1 line × 1 quarter × 1 indicator
+
+      **Primary key**: service_quality_key (surrogate)
+
+      **Sources**: IDFM "Indicateurs de qualité de service du parcours voyageur"
+
+      **Coverage**: RATP Métro + RER + SNCF Transilien
+      (replaces punctuality-only KPI which covers RER + TRAIN only)
+
+      **Materialization**: Incremental (merge on service_quality_key)
+
+      **Refresh**: Quarterly (3-4 weeks after quarter end)
+    columns:
+      - name: service_quality_key
+        description: "Surrogate key (PK) — hash(line_id, quarter_date, indicator_label)"
+        data_tests:
+          - not_null
+          - unique
+      - name: quarter_date
+        description: "First day of the quarter (partition key)"
+        data_tests:
+          - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
+      - name: quarter_num
+        description: "Quarter number (1-4)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 4
+              inclusive: true
+      - name: line_id
+        description: "IDFM line identifier (FK to dim_line where available)"
+        data_tests:
+          - not_null
+      - name: indicator_label
+        description: "Full indicator name (e.g. 'Information voyageurs statique en situation normale')"
+        data_tests:
+          - not_null
+      - name: indicator_theme
+        description: "Indicator theme/category (e.g. 'Information voyageurs', 'Ponctualité')"
+      - name: indicator_value
+        description: "Measured indicator value (%)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+              config:
+                severity: warn
+      - name: target_value
+        description: "IDFM target value for this indicator (%)"
+      - name: gap_to_target
+        description: "indicator_value - target_value (positive = above target)"
+      - name: quality_band
+        description: "Quality classification relative to target"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['exceeds_target', 'meets_target', 'near_target', 'below_target', 'no_target']
+      - name: transport_mode
+        description: "Transport mode (METRO, RER, TRAIN, etc.)"
+      - name: operator
+        description: "Operator (RATP, SNCF)"
+
+  # ─────────────────────────────────────────────────────────────
+  # X2 — CORE FACT: INCIDENTS DAILY
+  # ─────────────────────────────────────────────────────────────
+  - name: fct_incidents_daily
+    description: |
+      **Daily incidents fact table**
+
+      **Grain**: 1 day × 1 incident_type
+
+      **Primary key**: incident_key (surrogate)
+
+      **Sources**: IDFM "Messages d'information trafic"
+
+      **Incident types** (5 canonical categories):
+      PLANNED_WORK | UNPLANNED_DISRUPTION | PARTIAL_CLOSURE | FULL_CLOSURE | ACCESS_ISSUE
+
+      **Materialization**: Incremental (insert_overwrite on day partition)
+
+      **Refresh**: Daily
+    columns:
+      - name: incident_key
+        description: "Surrogate key (PK) — hash(incident_date, incident_type)"
+        data_tests:
+          - not_null
+          - unique
+      - name: incident_date
+        description: "Incident date (partition key)"
+        data_tests:
+          - not_null
+          - assert_valid_date_range:
+              min_date: '2020-01-01'
+      - name: incident_type
+        description: "Canonical incident category (UPPER)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['PLANNED_WORK', 'UNPLANNED_DISRUPTION', 'PARTIAL_CLOSURE', 'FULL_CLOSURE', 'ACCESS_ISSUE']
+      - name: incident_count
+        description: "Number of incident messages for this type on this day"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: major_incident_count
+        description: "Count of FULL_CLOSURE + UNPLANNED_DISRUPTION messages"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: affected_stop_count
+        description: "Total stops affected (sum of stops across all messages this day)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: avg_active_duration_minutes
+        description: "Average incident duration in minutes (NULL when no end date provided)"
+
+  # ─────────────────────────────────────────────────────────────
+  # X3 — MART: LINE RELIABILITY SCORECARD
+  # ─────────────────────────────────────────────────────────────
+  - name: mart_line_reliability_scorecard
+    description: |
+      **Monthly reliability scorecard per line**
+
+      **Grain**: 1 line × 1 month
+
+      **Combines**:
+      - Demand: `mart_validations_line_monthly` (METRO + RER trusted)
+      - Quality: `fct_service_quality_quarterly` (all modes, downsampled to month)
+      - Incidents: `fct_incidents_daily` (network-wide, aggregated to month)
+
+      **reliability_score** (0–100): weighted composite
+      - 40 pts demand trend (MoM growth)
+      - 40 pts avg service quality vs target
+      - 20 pts incident pressure (inverse)
+
+      **reliability_band**: high (≥70) / medium (≥40) / low (<40)
+
+      **Refresh**: Daily
+    columns:
+      - name: month_date
+        description: "Reference month"
+        data_tests:
+          - not_null
+      - name: line_id
+        description: "Line identifier"
+        data_tests:
+          - not_null
+      - name: total_validations
+        description: "Total trusted validations this month"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: reliability_score
+        description: "Composite reliability score (0–100)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: reliability_band
+        description: "Reliability band based on score"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['high', 'medium', 'low']
+
+  # ─────────────────────────────────────────────────────────────
+  # X4 — MART: STATION RELIABILITY SCORECARD
+  # ─────────────────────────────────────────────────────────────
+  - name: mart_station_reliability_scorecard
+    description: |
+      **Monthly reliability scorecard per station**
+
+      **Grain**: 1 station × 1 month
+
+      **Combines**:
+      - Demand: `mart_validations_station_daily` (all validated stops with lat/lon)
+      - Incidents: `fct_incidents_daily` (network-wide, month aggregate)
+
+      **Rationale**: Station is a more robust unit than line in major interchange
+      hubs (Châtelet, La Défense) where validations span multiple lines.
+
+      **station_reliability_band**: high / medium / low
+      (based on demand percentile vs p25/p75 and major incident pressure)
+
+      **Refresh**: Daily
+    columns:
+      - name: month_date
+        description: "Reference month"
+        data_tests:
+          - not_null
+      - name: station_id_zdc
+        description: "Zone de correspondance ID (FK to raw_ref_stations)"
+        data_tests:
+          - not_null
+      - name: total_validations
+        description: "Total validations for this station this month"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      - name: latitude
+        description: "Station latitude"
+        data_tests:
+          - not_null
+      - name: longitude
+        description: "Station longitude"
+        data_tests:
+          - not_null
+      - name: station_reliability_band
+        description: "Station reliability band"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['high', 'medium', 'low']
+
+  # ─────────────────────────────────────────────────────────────
+  # X5 — STAGING: HOURLY PROFILES
+  # ─────────────────────────────────────────────────────────────
+  # MONITORING - STRICTNESS MONITOR
+  - name: mart_strictness_monitor_daily
+    description: |
+      **Daily strictness monitor for non-blocking quality signals**
+
+      **Grain**: 1 check x 1 day
+
+      **Goal**: centralise soft failures that do not necessarily break the pipeline:
+      - empty RAW tables that still exist physically
+      - source tests configured as WARN
+      - malformed raw values filtered out downstream
+
+      **Current scope**:
+      - `raw_incidents_daily` availability and completeness
+      - `raw_hourly_profiles.hour` null tracking
+      - `raw_service_quality` critical field validity
+
+      **Status values**:
+      - `OK`: check passed
+      - `WARN`: non-blocking issue detected
+      - `ERROR`: serious issue detected, even if the pipeline itself stayed green
+
+      **Refresh**: Daily
+    columns:
+      - name: strictness_check_key
+        description: "Surrogate key on metric_date + check_id"
+        data_tests:
+          - not_null
+          - unique
+      - name: metric_date
+        description: "Date when the strictness checks were computed"
+        data_tests:
+          - not_null
+      - name: check_category
+        description: "High-level category: availability, completeness, or validity"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['availability', 'completeness', 'validity']
+      - name: check_id
+        description: "Stable identifier for the monitored rule"
+        data_tests:
+          - not_null
+      - name: source_table
+        description: "RAW table being monitored"
+        data_tests:
+          - not_null
+      - name: column_name
+        description: "Column being monitored when the check is column-level"
+      - name: expected_severity
+        description: "Intended severity of the rule if it fails"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['warn', 'error']
+      - name: status
+        description: "Observed status of the rule for the day"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['OK', 'WARN', 'ERROR']
+      - name: status_order
+        description: "Numeric sort order for dashboards: 1=OK, 2=WARN, 3=ERROR"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3]
+              quote: false
+      - name: observed_value
+        description: "Observed metric value returned by the check"
+        data_tests:
+          - not_null
+      - name: expected_min_value
+        description: "Minimum acceptable value when applicable"
+      - name: expected_max_value
+        description: "Maximum acceptable value when applicable"
+      - name: failing_row_count
+        description: "Number of offending rows when the check counts bad records"
+      - name: check_description
+        description: "Human-readable explanation of what the check is monitoring"
+        data_tests:
+          - not_null
+      - name: recommendation
+        description: "Suggested next action when the check is not OK"
+        data_tests:
+          - not_null
+
+  # X5 - STAGING: HOURLY PROFILES
+  - name: stg_hourly_profiles
+    description: |
+      **Hourly validation profiles for rail network**
+
+      **Grain**: 1 stop × 1 hour (0-23) × 1 day_type (JOHV/SAM/DIM)
+
+      **Source**: IDFM "Profils horaires de validations réseau ferré par arrêt et jour type"
+
+      **Published**: Quarterly snapshot (most recent: T4 2025)
+
+      **Use**:
+      - Intra-day demand distribution per stop
+      - Peak vs off-peak analysis
+      - Prepares V4-A weighted hourly allocation
+
+      **time_period** classification:
+      morning_peak | evening_peak | daytime | off_peak | night
+    columns:
+      - name: stop_id
+        description: "STIF numeric stop code"
+        data_tests:
+          - not_null
+      - name: hour
+        description: "Hour of day (0-23)"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 23
+              inclusive: true
+      - name: day_type
+        description: "Day type: JOHV (weekday), SAM (saturday), DIM (sunday/holiday)"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['JOHV', 'SAM', 'DIM']
+      - name: time_period
+        description: "Peak/off-peak classification"
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['morning_peak', 'evening_peak', 'daytime', 'off_peak', 'night']
+      - name: validation_share
+        description: "Share of daily validations in this hour/day_type (0-100%)"
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+              config:
+                severity: warn
+      - name: quarter
+        description: "Dataset edition (e.g. 'T4 2025')"
+        data_tests:
+          - not_null
+
 macros:
   - name: usage_profile
     description: >

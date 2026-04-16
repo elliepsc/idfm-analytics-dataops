@@ -76,6 +76,84 @@ sources:
         columns:
           - name: idfm_stop_id
           - name: stif_stop_code
+      - name: raw_service_quality
+        description: >
+          Quarterly service quality indicators from IDFM (qualité du parcours voyageur).
+          Covers RATP Métro + RER + SNCF Transilien — 1 row per line × quarter × indicator.
+          Full snapshot on each load (WRITE_TRUNCATE).
+          Quarter format: "T1 2022" (trimestre + annee combined by extractor).
+        columns:
+          - name: quarter
+            description: "Quarter string e.g. 'T1 2022' (trimestre + annee)"
+            data_tests:
+              - not_null
+          - name: line_id
+            description: "IDFM line identifier (may be NULL for bus)"
+          - name: indicator_label
+            description: "Full indicator name (e.g. 'Information voyageurs statique...')"
+            data_tests:
+              - not_null
+          - name: indicator_value
+            description: "Indicator value as text (%, e.g. '96.8')"
+          - name: target_value
+            description: "Target value as text (%, e.g. '98')"
+
+      - name: raw_incidents_daily
+        description: >
+          Daily disruption/incident messages from IDFM (Info Trafic).
+          Grain: 1 row per incident message. Appended daily (WRITE_APPEND).
+          Aggregated at day × incident_type in stg_incidents_daily.
+          ⚠️  Table not yet provisioned — source is PRIM API (PRIM_API_KEY required).
+          TODO (enable when table exists): restore not_null tests on incident_date + ingestion_ts,
+          set stg_incidents_daily enabled=True, fct_incidents_daily enabled=True,
+          mart_line_reliability_scorecard enabled=True, mart_station_reliability_scorecard enabled=True.
+        columns:
+          - name: incident_date
+            description: "Incident start date (YYYY-MM-DD)"
+            data_tests:
+              - not_null:
+                  config:
+                    severity: warn
+          - name: incident_type
+            description: "Disruption category (e.g. TRAVAUX, INCIDENT)"
+          - name: line_id
+            description: "Affected IDFM line_id"
+          - name: ingestion_ts
+            description: "Ingestion timestamp"
+            data_tests:
+              - not_null:
+                  config:
+                    severity: warn
+
+      - name: raw_hourly_profiles
+        description: >
+          Hourly validation profiles for the rail network (ferré), by stop and day type.
+          Source: IDFM quarterly snapshot dataset.
+          Grain: 1 stop × 1 hour × 1 day_type.
+          Full snapshot on each load (WRITE_TRUNCATE — one edition at a time).
+          Day type normalised by extractor: JOHV/JOVS→JOHV, SAHV/SAVS→SAM, DIJFP→DIM.
+        columns:
+          - name: stop_id
+            description: "STIF numeric stop code"
+            data_tests:
+              - not_null
+          - name: hour
+            description: "Hour of day (0-23), parsed from 'NNH-NNH' label by extractor. NULL for rows with unexpected trnc_horr_60 format — filtered in staging."
+            data_tests:
+              - not_null:
+                  config:
+                    severity: warn
+                    # TODO: upgrade to severity: error once all trnc_horr_60 formats are confirmed parseable
+                    # 1 NULL row observed on first quarterly load (2026-04-15) — format logged by extractor
+          - name: day_type
+            description: "Day type: JOHV (weekday), SAM (saturday), DIM (sunday/holiday)"
+            data_tests:
+              - not_null
+          - name: validation_share
+            description: "Share of daily validations falling in this hour (0-100%)"
+          - name: quarter
+            description: "Quarter edition label e.g. 'T2 2025' — set by extractor from config"
+
       - name: raw_ref_stations
         description: "Station reference data from IDFM — emplacement-des-gares-idf dataset"
         columns:
