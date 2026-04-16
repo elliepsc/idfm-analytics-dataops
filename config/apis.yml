@@ -93,25 +93,27 @@ idfm:
         operator:          "operateur"                   # e.g. "RATP", "SNCF"
     # -------------------------------------------------------------------------
     # DISRUPTION / INCIDENTS (daily snapshot)
-    # ⚠️  NO ODS DATASET AVAILABLE — source is the PRIM API (disruptions_bulk).
-    # ODS catalog search on 2026-04-15 found no matching incident dataset.
-    # The PRIM API (prim.iledefrance-mobilites.fr) provides SIRI/GTFS-RT data
-    # but requires a separate PRIM API key (env var: PRIM_API_KEY).
+    # Primary source: PRIM Navitia "Messages Info Trafic (v2)" line_reports API.
+    # Confirmed contract on 2026-04-16 from exported swagger + live JSON sample:
+    #   Host:      https://prim.iledefrance-mobilites.fr
+    #   Endpoint:  /marketplace/v2/navitia/line_reports/line_reports
+    #   Auth:      header "apikey: <PRIM_API_KEY>"
+    #   Payload:   top-level "disruptions" array + paginated "line_reports"
     #
-    # Current status: extractor returns empty gracefully (no crash).
-    # X2 is blocked until PRIM API access is set up.
-    # Fallback: use "cartes-des-travaux" (ODS) for planned works only — no unplanned.
+    # Fallback: use "cartes-des-travaux" (ODS) for planned works only when
+    # PRIM is unavailable.
     # -------------------------------------------------------------------------
     incidents:
       id: "cartes-des-travaux"                 # Fallback ODS: planned works only
       prim:
-        api_url: null                          # Prefer env var PRIM_API_URL for the exact disruptions_bulk endpoint
-        records_path: "disruptions"            # Expected payload path from the PRIM bulk API
-        api_key_location: "query"              # Supported: query | header | bearer
+        api_url: "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/line_reports"
+        records_path: "line_reports"
+        api_key_location: "header"
         api_key_name: "apikey"
-        start_date_param: null                 # Fill if the endpoint supports date-window filtering
+        start_date_param: null                 # Filtered client-side from application_periods
         end_date_param: null
-        default_params: {}
+        default_params:
+          count: 100
       fields:
         incident_date:     "date_debut"         # Start date (YYYY-MM-DD)
         incident_end_date: "date_fin"           # End date (YYYY-MM-DD or NULL)

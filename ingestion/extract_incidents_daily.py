@@ -10,7 +10,7 @@ import argparse
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +40,7 @@ INCIDENT_TYPE_MAP = {
     "BLOQUANTE": "full_closure",
     "ACCES": "access_issue",
     "ACCESSIBILITE": "access_issue",
+    "ASCENSEUR": "access_issue",
 }
 
 
@@ -96,6 +97,15 @@ def _extract_prim_records(
     return []
 
 
+def _parse_iso_date(raw_value: str | None) -> date | None:
+    if not raw_value:
+        return None
+    try:
+        return datetime.strptime(raw_value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def _parse_prim_datetime(raw_value: str | None) -> datetime | None:
     if not raw_value:
         return None
@@ -128,6 +138,10 @@ def _extract_application_dates(
     return incident_date, incident_end_date
 
 
+def _get_application_periods(record: dict[str, Any]) -> list[dict[str, Any]]:
+    return record.get("application_periods") or record.get("applicationPeriods") or []
+
+
 def _normalise_line_id(raw_line_id: str | None) -> str | None:
     if not raw_line_id:
         return None
@@ -137,13 +151,30 @@ def _normalise_line_id(raw_line_id: str | None) -> str | None:
 
 
 def _extract_primary_line(disruption: dict[str, Any]) -> dict[str, Any]:
+    linked_line = disruption.get("_linked_line")
+    if isinstance(linked_line, dict):
+        return linked_line
+
     lines = disruption.get("lines") or []
     if lines:
         return lines[0]
 
-    for obj in disruption.get("impactedObjects") or []:
-        if obj.get("type") == "line":
-            return obj
+    impacted_objects = (
+        disruption.get("impacted_objects")
+        or disruption.get("impactedObjects")
+        or []
+    )
+
+    for obj in impacted_objects:
+        pt_object = obj.get("pt_object") or obj
+        embedded_type = pt_object.get("embedded_type") or obj.get("type")
+
+        if embedded_type == "line":
+            return pt_object.get("line") or pt_object
+
+        line = pt_object.get("line")
+        if isinstance(line, dict):
+            return line
 
     return {}
 
@@ -151,12 +182,167 @@ def _extract_primary_line(disruption: dict[str, Any]) -> dict[str, Any]:
 def _extract_affected_stop_names(disruption: dict[str, Any]) -> list[str]:
     stop_names: list[str] = []
 
-    for obj in disruption.get("impactedObjects") or []:
-        if obj.get("type") in {"stop_point", "stop_area"} and obj.get("name"):
-            stop_names.append(obj["name"].strip())
+    impacted_objects = (
+        disruption.get("impacted_objects")
+        or disruption.get("impactedObjects")
+        or []
+    )
+
+    for obj in impacted_objects:
+        pt_object = obj.get("pt_object") or obj
+        embedded_type = pt_object.get("embedded_type") or obj.get("type")
+
+        if embedded_type not in {"stop_point", "stop_area"}:
+            continue
+
+        name = pt_object.get("name")
+        if not name and isinstance(pt_object.get(embedded_type), dict):
+            name = pt_object[embedded_type].get("name")
+
+        if name:
+            stop_names.append(name.strip())
 
     # Keep order, remove duplicates
     return list(dict.fromkeys(name for name in stop_names if name))
+
+
+def _extract_message_texts(disruption: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for message in disruption.get("messages") or []:
+        text = message.get("text")
+        if text:
+            texts.append(text.strip())
+    return texts
+
+
+def _extract_message_title(disruption: dict[str, Any]) -> str | None:
+    for message in disruption.get("messages") or []:
+        channel = message.get("channel") or {}
+        types = channel.get("types") or []
+        if "title" in types and message.get("text"):
+            return message["text"].strip()
+
+    texts = _extract_message_texts(disruption)
+    return texts[0] if texts else None
+
+
+def _extract_transport_mode(line: dict[str, Any]) -> str | None:
+    physical_modes = line.get("physical_modes") or []
+    if physical_modes and physical_modes[0].get("name"):
+        return physical_modes[0]["name"].upper()
+
+    commercial_mode = line.get("commercial_mode") or {}
+    if commercial_mode.get("name"):
+        return commercial_mode["name"].upper()
+
+    mode = line.get("mode")
+    return mode.upper() if isinstance(mode, str) and mode else None
+
+
+def _build_line_lookup(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+
+    for line_report in payload.get("line_reports") or []:
+        line = line_report.get("line") or {}
+        if not isinstance(line, dict) or not line:
+            continue
+
+        for link in line.get("links") or []:
+            if link.get("type") != "disruption" or not link.get("id"):
+                continue
+            lookup.setdefault(link["id"], line)
+
+    return lookup
+
+
+def _enrich_prim_records(
+    payload: dict[str, Any] | list[dict[str, Any]],
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return records
+
+    # line_reports format: attach top-level disruptions as context for each report
+    if records and "line" in records[0]:
+        disruptions = payload.get("disruptions") or []
+        return [{**record, "_disruptions": disruptions} for record in records]
+
+    # disruptions format: enrich with line info from line_reports via links
+    line_lookup = _build_line_lookup(payload)
+    if not line_lookup:
+        return records
+
+    enriched: list[dict[str, Any]] = []
+    for record in records:
+        record_id = record.get("id") or record.get("uri")
+        linked_line = line_lookup.get(record_id)
+
+        if linked_line:
+            enriched.append({**record, "_linked_line": linked_line})
+        else:
+            enriched.append(record)
+
+    return enriched
+
+
+def _record_overlaps_window(
+    record: dict[str, Any],
+    start_date: str,
+    end_date: str,
+) -> bool:
+    # line_report format: check against any of the attached disruptions' periods
+    if "line" in record:
+        disruptions = record.get("_disruptions") or []
+        if not disruptions:
+            return True
+        return any(
+            _record_overlaps_window(d, start_date, end_date) for d in disruptions
+        )
+
+    window_start = _parse_iso_date(start_date)
+    window_end = _parse_iso_date(end_date)
+    if not window_start or not window_end:
+        return True
+
+    incident_start, incident_end = _extract_application_dates(
+        _get_application_periods(record)
+    )
+    incident_start_date = _parse_iso_date(incident_start)
+    incident_end_date = _parse_iso_date(incident_end)
+
+    if not incident_start_date and not incident_end_date:
+        return True
+
+    incident_start_date = incident_start_date or incident_end_date
+    incident_end_date = incident_end_date or incident_start_date
+
+    if not incident_start_date or not incident_end_date:
+        return True
+
+    return incident_start_date <= window_end and incident_end_date >= window_start
+
+
+def _is_usable_prim_record(record: dict[str, Any]) -> bool:
+    # line_report format: usable when the report has a valid line id
+    if "line" in record:
+        return bool((record.get("line") or {}).get("id"))
+    # disruption format: filter to incident category
+    return (record.get("category") or "").upper() == "INCIDENTS"
+
+
+def _fetch_prim_page(
+    client: PRIMClient,
+    prim_config: dict[str, Any],
+    start_date: str,
+    end_date: str,
+    start_page: int = 0,
+) -> tuple[dict[str, Any] | list[dict[str, Any]], list[dict[str, Any]]]:
+    params = _build_prim_params(prim_config, start_date, end_date)
+    params["start_page"] = start_page
+
+    payload = client.get_json(params=params)
+    records = _extract_prim_records(payload, prim_config.get("records_path"))
+    return payload, _enrich_prim_records(payload, records)
 
 
 def _build_prim_params(prim_config: dict[str, Any], start_date: str, end_date: str):
@@ -188,18 +374,57 @@ def _extract_from_prim(
     client = PRIMClient(
         url=api_url,
         api_key=api_key,
-        api_key_location=prim_config.get("api_key_location", "query"),
+        api_key_location=prim_config.get("api_key_location", "header"),
         api_key_name=prim_config.get("api_key_name", "apikey"),
         default_params=prim_config.get("default_params", {}),
     )
 
-    payload = client.get_json(
-        params=_build_prim_params(prim_config, start_date, end_date)
+    payload, records = _fetch_prim_page(
+        client=client,
+        prim_config=prim_config,
+        start_date=start_date,
+        end_date=end_date,
+        start_page=0,
     )
 
-    records = _extract_prim_records(payload, prim_config.get("records_path"))
-    logger.info("Extracted %s raw incidents from PRIM", len(records))
-    return records
+    all_records = list(records)
+    pagination = payload.get("pagination") if isinstance(payload, dict) else None
+
+    if isinstance(pagination, dict):
+        total_result = pagination.get("total_result") or len(records)
+        items_per_page = pagination.get("items_per_page") or len(records) or 1
+        current_page = pagination.get("start_page", 0)
+
+        while len(all_records) < total_result:
+            current_page += 1
+            _, page_records = _fetch_prim_page(
+                client=client,
+                prim_config=prim_config,
+                start_date=start_date,
+                end_date=end_date,
+                start_page=current_page,
+            )
+            if not page_records:
+                break
+
+            all_records.extend(page_records)
+
+            if len(page_records) < items_per_page:
+                break
+
+    filtered_records = [
+        record
+        for record in all_records
+        if _is_usable_prim_record(record)
+        and _record_overlaps_window(record, start_date, end_date)
+    ]
+
+    logger.info(
+        "Extracted %s PRIM incidents after filtering (%s raw records)",
+        len(filtered_records),
+        len(all_records),
+    )
+    return filtered_records
 
 
 def _extract_from_ods_fallback(
@@ -230,36 +455,101 @@ def _extract_from_ods_fallback(
     return client.get_all_records(select=select_clause, where=where_clause)
 
 
-def _transform_prim_record(
+def _transform_line_report_record(
     record: dict[str, Any],
     ingestion_ts: str,
 ) -> dict[str, Any]:
-    line = _extract_primary_line(record)
-    incident_date, incident_end_date = _extract_application_dates(
-        record.get("applicationPeriods")
-    )
-    affected_stops = _extract_affected_stop_names(record)
+    """Transform a Navitia line_report object into a canonical incident record.
 
-    raw_type = record.get("cause") or record.get("severity")
+    line_report structure:
+      {"line": {...}, "pt_objects": [...], "_disruptions": [...]}
+    Line info comes from record["line"]; date/cause from the first attached disruption.
+    """
+    line = record.get("line") or {}
+    disruptions = record.get("_disruptions") or []
+    first_disruption = disruptions[0] if disruptions else {}
+
+    incident_date, incident_end_date = _extract_application_dates(
+        _get_application_periods(first_disruption)
+    )
+    # Daily snapshot: fall back to today when no application period is found
+    if not incident_date:
+        incident_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Extract affected stop names from pt_objects
+    stop_names: list[str] = []
+    for pt_obj in record.get("pt_objects") or []:
+        stop_area = pt_obj.get("stop_area") or {}
+        name = stop_area.get("name") or pt_obj.get("name")
+        if name:
+            stop_names.append(name.strip())
+    stop_names = list(dict.fromkeys(stop_names))
+
+    severity_name = (first_disruption.get("severity") or {}).get("name")
+    title = _extract_message_title(first_disruption)
+    message_text = " ".join(_extract_message_texts(first_disruption))
+    raw_type = (
+        first_disruption.get("cause") or severity_name or first_disruption.get("category")
+    )
 
     return {
         "incident_date": incident_date,
         "incident_end_date": incident_end_date,
         "line_id": _normalise_line_id(line.get("id")),
-        "line_name": line.get("name") or line.get("shortName"),
+        "line_name": line.get("code") or line.get("name"),
+        "incident_type_raw": raw_type,
+        "incident_type": normalise_incident_type(
+            first_disruption.get("cause"),
+            severity_name,
+            title,
+            message_text,
+        ),
+        "cause": first_disruption.get("cause"),
+        "affected_stops": ", ".join(stop_names),
+        "transport_mode": _extract_transport_mode(line),
+        "affected_stop_count": len(stop_names),
+        "ingestion_ts": ingestion_ts,
+        "source": "idfm_incidents_prim_navitia",
+    }
+
+
+def _transform_prim_record(
+    record: dict[str, Any],
+    ingestion_ts: str,
+) -> dict[str, Any]:
+    # Dispatch on format: line_report vs disruption
+    if "line" in record:
+        return _transform_line_report_record(record, ingestion_ts)
+
+    line = _extract_primary_line(record)
+    incident_date, incident_end_date = _extract_application_dates(
+        _get_application_periods(record)
+    )
+    affected_stops = _extract_affected_stop_names(record)
+    severity_name = (record.get("severity") or {}).get("name")
+    title = _extract_message_title(record)
+    message_text = " ".join(_extract_message_texts(record))
+
+    raw_type = record.get("cause") or severity_name or record.get("category")
+
+    return {
+        "incident_date": incident_date,
+        "incident_end_date": incident_end_date,
+        "line_id": _normalise_line_id(line.get("id")),
+        "line_name": line.get("code") or line.get("name") or line.get("shortName"),
         "incident_type_raw": raw_type,
         "incident_type": normalise_incident_type(
             record.get("cause"),
-            record.get("severity"),
-            record.get("title"),
-            record.get("message"),
+            severity_name,
+            title,
+            message_text,
         ),
         "cause": record.get("cause"),
         "affected_stops": ", ".join(affected_stops),
-        "transport_mode": (line.get("mode") or "").upper() or None,
+        "transport_mode": _extract_transport_mode(line),
         "affected_stop_count": len(affected_stops),
         "ingestion_ts": ingestion_ts,
-        "source": "idfm_incidents_prim",
+        "source": "idfm_incidents_prim_navitia",
     }
 
 
