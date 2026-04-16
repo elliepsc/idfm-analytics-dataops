@@ -216,8 +216,16 @@ def _extract_from_ods_fallback(
 
     fields = dataset_config["fields"]
     select_clause = ", ".join(fields.values())
-    date_field = fields["incident_date"]
-    where_clause = f"{date_field} >= '{start_date}' AND {date_field} <= '{end_date}'"
+    date_begin_field = fields["incident_date"]  # date_debut
+    date_end_field = fields["incident_end_date"]  # date_fin
+
+    # Find works ACTIVE during the window, not just ones that started then.
+    # date_debut <= end_date → started before or during the window
+    # date_fin IS NULL OR date_fin >= start_date → still ongoing during the window
+    where_clause = (
+        f"{date_begin_field} <= '{end_date}'"
+        f" AND ({date_end_field} IS NULL OR {date_end_field} >= '{start_date}')"
+    )
 
     return client.get_all_records(select=select_clause, where=where_clause)
 
@@ -259,6 +267,7 @@ def _transform_ods_record(
     record: dict[str, Any],
     fields: dict[str, str],
     ingestion_ts: str,
+    extraction_date: str,
 ) -> dict[str, Any]:
     extracted_record = {target: record.get(source) for target, source in fields.items()}
     extracted_record["incident_type_raw"] = extracted_record.get("incident_type")
@@ -270,6 +279,12 @@ def _transform_ods_record(
     extracted_record["affected_stop_count"] = len(
         [stop for stop in affected_raw.split(",") if stop.strip()]
     )
+
+    # Override incident_date with the extraction date (start_date) so the
+    # staging grain (incident_date, incident_type) represents "active works on day X"
+    # rather than the original work start date (which may be weeks in the past).
+    extracted_record["incident_date"] = extraction_date
+
     extracted_record["ingestion_ts"] = ingestion_ts
     extracted_record["source"] = "idfm_incidents_ods_fallback"
     return extracted_record
@@ -327,7 +342,10 @@ def extract_incidents_daily(
     else:
         fields = dataset_config["fields"]
         extracted = [
-            _transform_ods_record(record, fields, ingestion_ts) for record in records
+            _transform_ods_record(
+                record, fields, ingestion_ts, extraction_date=start_date
+            )
+            for record in records
         ]
 
     extracted = [
