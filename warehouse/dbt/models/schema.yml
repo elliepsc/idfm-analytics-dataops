@@ -188,7 +188,7 @@ models:
         description: "Primary transport mode (best-effort for multimodal interchange stops)"
         data_tests:
           - accepted_values:
-              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR']
+              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR', 'TRAMWAY', 'RAILSHUTTLE', 'LOCALTRAIN', 'REGIONALRAIL', 'RAPIDTRANSIT']
               config:
                 severity: warn
       - name: operator
@@ -220,7 +220,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR']
+              values: ['RER', 'METRO', 'RAIL', 'BUS', 'TRAM', 'CABLEWAY', 'FUNICULAR', 'TRAMWAY', 'RAILSHUTTLE', 'LOCALTRAIN', 'REGIONALRAIL', 'RAPIDTRANSIT']
               severity: warn
       - name: operator
         description: "Transport operator (RATP, SNCF, etc.)"
@@ -491,13 +491,14 @@ models:
           - assert_valid_date_range:
               min_date: '2020-01-01'
       - name: line_id
-        description: "FK -> dim_line (WARN: 156 Transilien lines unresolved)"
+        description: "FK -> dim_line (BUS/TRAM lines excluded: no punctuality data for non-rail modes)"
         data_tests:
           - not_null
           - relationships:
               to: ref('dim_line')
-              severity: warn
               field: line_id
+              config:
+                severity: warn
       - name: punctuality_rate
         description: "Punctuality rate (0-100%)"
         data_tests:

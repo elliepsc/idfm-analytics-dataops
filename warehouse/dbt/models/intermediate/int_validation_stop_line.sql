@@ -105,6 +105,7 @@ SELECT
   {{ dbt_utils.generate_surrogate_key([
     'b.validation_date',
     'b.stif_stop_id',
+    'b.idfm_stop_id',
     'b.ticket_type',
     'b.line_id'
   ]) }} AS validation_bridge_key,
