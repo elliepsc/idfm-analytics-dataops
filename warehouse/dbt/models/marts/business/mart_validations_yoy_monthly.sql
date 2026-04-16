@@ -43,11 +43,12 @@ yoy AS (
     ) AS same_month_last_year,
 
     -- YoY growth %
+    -- NOTE: native SAFE_DIVIDE used (not macro) to avoid operator precedence issues
     ROUND(
-      {{ safe_divide(
-        'total_validations - LAG(total_validations, 12) OVER (ORDER BY validation_month)',
-        'LAG(total_validations, 12) OVER (ORDER BY validation_month)'
-      ) }} * 100,
+      SAFE_DIVIDE(
+        total_validations - LAG(total_validations, 12) OVER (ORDER BY validation_month),
+        NULLIF(LAG(total_validations, 12) OVER (ORDER BY validation_month), 0)
+      ) * 100,
       2
     ) AS yoy_growth_pct,
 
@@ -57,10 +58,10 @@ yoy AS (
     ) AS prev_month_validations,
 
     ROUND(
-      {{ safe_divide(
-        'total_validations - LAG(total_validations, 1) OVER (ORDER BY validation_month)',
-        'LAG(total_validations, 1) OVER (ORDER BY validation_month)'
-      ) }} * 100,
+      SAFE_DIVIDE(
+        total_validations - LAG(total_validations, 1) OVER (ORDER BY validation_month),
+        NULLIF(LAG(total_validations, 1) OVER (ORDER BY validation_month), 0)
+      ) * 100,
       2
     ) AS mom_growth_pct
 

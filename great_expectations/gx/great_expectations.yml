@@ -87,11 +87,11 @@ fluent_datasources:
     assets:
       validations_asset:
         type: dataframe
-        id: 49c6692e-920c-4946-89db-0f391cbdaa38
+        id: 335bb3fb-162c-4b4e-9271-2d45347bfd10
         batch_metadata: {}
         batch_definitions:
           batch:
-            id: e4b2eca1-aa98-4706-b18c-76a9f9791777
+            id: b769977b-6554-4a61-baec-51cc9f0b727d
             partitioner:
   bigquery_raw:
     type: sql
