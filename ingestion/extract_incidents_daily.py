@@ -160,9 +160,7 @@ def _extract_primary_line(disruption: dict[str, Any]) -> dict[str, Any]:
         return lines[0]
 
     impacted_objects = (
-        disruption.get("impacted_objects")
-        or disruption.get("impactedObjects")
-        or []
+        disruption.get("impacted_objects") or disruption.get("impactedObjects") or []
     )
 
     for obj in impacted_objects:
@@ -183,9 +181,7 @@ def _extract_affected_stop_names(disruption: dict[str, Any]) -> list[str]:
     stop_names: list[str] = []
 
     impacted_objects = (
-        disruption.get("impacted_objects")
-        or disruption.get("impactedObjects")
-        or []
+        disruption.get("impacted_objects") or disruption.get("impactedObjects") or []
     )
 
     for obj in impacted_objects:
@@ -489,7 +485,9 @@ def _transform_line_report_record(
     title = _extract_message_title(first_disruption)
     message_text = " ".join(_extract_message_texts(first_disruption))
     raw_type = (
-        first_disruption.get("cause") or severity_name or first_disruption.get("category")
+        first_disruption.get("cause")
+        or severity_name
+        or first_disruption.get("category")
     )
 
     return {
